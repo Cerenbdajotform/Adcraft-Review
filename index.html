@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Adcraft Human Review Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Adcraft Ops</p>
+          <h1>Human Review Dashboard</h1>
+          <p class="hero-copy">
+            Review generated form templates by campaign and day, capture notes,
+            verify checklist criteria, and jump to L2 when a template needs
+            escalation.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <label class="file-picker">
+            <span>Upload TSV or CSV</span>
+            <input id="dataset-upload" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
+          </label>
+          <button id="export-reviews" class="secondary-button" type="button">
+            Export Reviews
+          </button>
+          <button id="reset-local" class="ghost-button" type="button">
+            Reset Local Changes
+          </button>
+        </div>
+      </header>
+
+      <section class="summary-grid" id="summary-grid"></section>
+
+      <main class="dashboard-layout">
+        <aside class="queue-panel">
+          <div class="panel-header">
+            <div>
+              <p class="section-label">Queue</p>
+              <h2>Templates</h2>
+            </div>
+            <span id="queue-count" class="count-pill">0 items</span>
+          </div>
+
+          <div class="filters">
+            <label>
+              <span>Search</span>
+              <input id="search-filter" type="search" placeholder="Title, campaign, use case" />
+            </label>
+            <label>
+              <span>Status</span>
+              <select id="status-filter">
+                <option value="all">All</option>
+                <option value="Pending">Pending</option>
+                <option value="Reviewed">Reviewed</option>
+              </select>
+            </label>
+            <label>
+              <span>Campaign</span>
+              <select id="campaign-filter">
+                <option value="all">All campaigns</option>
+              </select>
+            </label>
+            <label>
+              <span>Date</span>
+              <select id="date-filter">
+                <option value="all">All dates</option>
+              </select>
+            </label>
+          </div>
+
+          <div id="queue-list" class="queue-list"></div>
+        </aside>
+
+        <section class="detail-panel">
+          <div id="empty-state" class="empty-state">
+            <p class="section-label">Review Workspace</p>
+            <h2>Select a template</h2>
+            <p>
+              Pick a template from the queue to see the form, add notes, update
+              review criteria, and open an L2 ticket if needed.
+            </p>
+          </div>
+
+          <div id="detail-view" class="detail-view hidden">
+            <div class="detail-header">
+              <div>
+                <p id="detail-campaign" class="section-label"></p>
+                <h2 id="detail-title"></h2>
+                <div id="detail-meta" class="meta-row"></div>
+              </div>
+              <div class="detail-actions">
+                <a id="open-template" class="secondary-button" target="_blank" rel="noreferrer">Open Template</a>
+                <a id="open-original-template" class="ghost-button" target="_blank" rel="noreferrer">Open Original</a>
+                <a
+                  id="open-l2-ticket"
+                  class="primary-button"
+                  href="https://support.jotform.com/admn/dashboards/l2-tickets/create/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open L2 Ticket
+                </a>
+              </div>
+            </div>
+
+            <div class="detail-grid">
+              <section class="card preview-card">
+                <div class="card-header">
+                  <div>
+                    <p class="section-label">Form Preview</p>
+                    <h3>Embedded template</h3>
+                  </div>
+                  <span class="hint-text">
+                    If embed is blocked, use “Open Template”.
+                  </span>
+                </div>
+                <iframe id="template-frame" title="Template preview"></iframe>
+              </section>
+
+              <section class="card info-card">
+                <div class="card-header">
+                  <div>
+                    <p class="section-label">Context</p>
+                    <h3>Template details</h3>
+                  </div>
+                </div>
+                <dl id="template-facts" class="facts-grid"></dl>
+              </section>
+            </div>
+
+            <section class="card review-card">
+              <div class="card-header">
+                <div>
+                  <p class="section-label">Checklist</p>
+                  <h3>Human review fields</h3>
+                </div>
+                <button id="mark-reviewed" class="secondary-button" type="button">
+                  Save Review
+                </button>
+              </div>
+
+              <div class="review-grid" id="review-grid"></div>
+
+              <div class="notes-grid">
+                <label class="textarea-wrap">
+                  <span>Review notes</span>
+                  <textarea
+                    id="review-notes"
+                    rows="7"
+                    placeholder="Write what is wrong, what passed, and whether L2 is needed."
+                  ></textarea>
+                </label>
+
+                <div class="review-meta-card">
+                  <label>
+                    <span>Reviewer</span>
+                    <input id="reviewer-name" type="text" placeholder="Reviewer name" />
+                  </label>
+                  <label>
+                    <span>Review decision</span>
+                    <select id="review-decision">
+                      <option value="Pending">Pending</option>
+                      <option value="Pass">Pass</option>
+                      <option value="Needs Fix">Needs Fix</option>
+                      <option value="Escalate L2">Escalate L2</option>
+                    </select>
+                  </label>
+                  <label>
+                    <span>Priority</span>
+                    <input id="review-priority" type="text" placeholder="High, Medium, Low" />
+                  </label>
+                  <div class="timestamp-block">
+                    <span>Last saved</span>
+                    <strong id="review-saved-at">Not saved yet</strong>
+                  </div>
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
