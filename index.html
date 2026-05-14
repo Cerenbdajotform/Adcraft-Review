@@ -7,196 +7,260 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Adcraft Ops</p>
-          <h1>Adcraft Form Review Dashboard</h1>
-          <p class="hero-copy">
-            Review generated form templates by campaign and day, capture notes,
-            verify checklist criteria, and jump to L2 when a template needs
-            escalation.
-          </p>
-        </div>
-        <div class="hero-actions">
-          <div id="sync-card" class="sync-card" data-mode="loading">
-            <strong id="sync-mode">Connecting</strong>
-            <span id="sync-detail">Checking shared review storage…</span>
+    <div class="admin-shell">
+      <header class="topbar">
+        <div class="brand-lockup">
+          <div class="brand" aria-label="Jotform">
+            <span class="brand-mark" aria-hidden="true">
+              <svg viewBox="0 0 36 36" role="presentation">
+                <path fill="#0F67FF" d="M8 6a3 3 0 0 1 4.24 0l4.52 4.52a3 3 0 0 1 0 4.24l-3.76 3.76a3 3 0 0 1-4.24 0L4.24 14.76a3 3 0 0 1 0-4.24Z" />
+                <path fill="#FF8A00" d="M22.82 4.6a3 3 0 0 1 4.24 0l4.1 4.1a3 3 0 0 1 0 4.24l-9.23 9.23a3 3 0 0 1-4.24 0l-4.1-4.1a3 3 0 0 1 0-4.24Z" />
+                <path fill="#1B275A" d="M4 22.88a3 3 0 0 1 3-3h5.2a3 3 0 0 1 2.12.88l3.6 3.6a3 3 0 0 1 0 4.24l-4.48 4.48A3 3 0 0 1 11.32 34H7a3 3 0 0 1-3-3Z" />
+              </svg>
+            </span>
+            <span class="brand-wordmark">Jotform</span>
           </div>
-          <div class="date-range-card">
-            <p class="date-range-label">Date Range</p>
-            <div class="date-range-controls">
-              <label>
-                <span>From</span>
-                <select id="date-from-filter">
-                  <option value="all">All dates</option>
-                </select>
-              </label>
-              <label>
-                <span>To</span>
-                <select id="date-to-filter">
-                  <option value="all">All dates</option>
-                </select>
-              </label>
-            </div>
-          </div>
-          <label class="file-picker">
-            <span id="upload-label">Upload TSV or CSV</span>
-            <input id="dataset-upload" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
-          </label>
-          <button id="export-reviews" class="secondary-button" type="button">
-            Export Reviews
-          </button>
-          <button id="reset-local" class="ghost-button" type="button">
-            Reload Data
-          </button>
+          <span class="topbar-divider" aria-hidden="true"></span>
+          <span class="topbar-product">Adcraft Management Dashboard</span>
         </div>
       </header>
 
-      <section class="summary-grid" id="summary-grid"></section>
-
-      <main class="dashboard-layout">
-        <aside class="queue-panel">
-          <div class="panel-header">
-            <div>
-              <p class="section-label">Queue</p>
-              <h2>Templates</h2>
-            </div>
-            <span id="queue-count" class="count-pill">0 items</span>
-          </div>
-
-          <div class="filters">
-            <label>
-              <span>Search</span>
-              <input id="search-filter" type="search" placeholder="Title, campaign, use case" />
-            </label>
-            <label>
-              <span>Status</span>
-              <select id="status-filter">
-                <option value="all">All</option>
-                <option value="Pending">Pending</option>
-                <option value="Reviewed">Reviewed</option>
-              </select>
-            </label>
-            <label>
-              <span>Campaign</span>
-              <select id="campaign-filter">
-                <option value="all">All campaigns</option>
-              </select>
-            </label>
-          </div>
-
-          <div id="queue-list" class="queue-list"></div>
+      <div class="workspace-shell">
+        <aside class="sidebar">
+          <nav class="sidebar-nav" aria-label="Primary">
+            <button class="sidebar-link active" type="button">
+              <span class="sidebar-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" role="presentation">
+                  <rect x="3" y="2.5" width="14" height="15" rx="3"></rect>
+                  <rect x="6.2" y="6" width="7.6" height="1.6" rx=".8" fill="white"></rect>
+                  <rect x="6.2" y="9.2" width="7.6" height="1.6" rx=".8" fill="white"></rect>
+                  <rect x="6.2" y="12.4" width="5.4" height="1.6" rx=".8" fill="white"></rect>
+                </svg>
+              </span>
+              <span>Templates</span>
+              <span class="sidebar-caret" aria-hidden="true">⌄</span>
+            </button>
+            <button class="sidebar-link" type="button">
+              <span class="sidebar-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" role="presentation">
+                  <path d="M10 2.5a5.5 5.5 0 0 0-3.66 9.6l-.88 3.4 3.19-1.34A5.5 5.5 0 1 0 10 2.5Z"></path>
+                  <rect x="9.2" y="6.2" width="1.6" height="4.6" rx=".8" fill="white"></rect>
+                  <circle cx="10" cy="12.9" r="1" fill="white"></circle>
+                </svg>
+              </span>
+              <span>Ideas</span>
+            </button>
+            <button class="sidebar-link active" type="button">
+              <span class="sidebar-icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20" role="presentation">
+                  <rect x="2.5" y="2.5" width="6" height="6" rx="2"></rect>
+                  <rect x="11.5" y="2.5" width="6" height="6" rx="2"></rect>
+                  <rect x="2.5" y="11.5" width="6" height="6" rx="2"></rect>
+                  <rect x="11.5" y="11.5" width="6" height="6" rx="2"></rect>
+                </svg>
+              </span>
+              <span>Tools</span>
+              <span class="sidebar-caret" aria-hidden="true">⌄</span>
+            </button>
+          </nav>
         </aside>
 
-        <section class="detail-panel">
-          <div id="empty-state" class="empty-state">
-            <p class="section-label">Review Workspace</p>
-            <h2>Select a template</h2>
-            <p>
-              Pick a template from the queue to see the form, add notes, update
-              review criteria, and open an L2 ticket if needed.
-            </p>
-          </div>
-
-          <div id="detail-view" class="detail-view hidden">
-            <div class="detail-header">
-              <div>
-                <p id="detail-campaign" class="section-label"></p>
-                <h2 id="detail-title"></h2>
-                <div id="detail-meta" class="meta-row"></div>
-              </div>
-              <div class="detail-actions">
-                <a id="open-template" class="secondary-button" target="_blank" rel="noreferrer">Open Template</a>
-                <a id="open-original-template" class="ghost-button" target="_blank" rel="noreferrer">Open Original</a>
-                <a
-                  id="open-l2-ticket"
-                  class="primary-button"
-                  href="https://support.jotform.com/admn/dashboards/l2-tickets/create/"
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open L2 Ticket
-                </a>
-              </div>
-            </div>
-
-            <div class="detail-grid">
-              <section class="card preview-card">
-                <div class="card-header">
-                  <div>
-                    <p class="section-label">Form Preview</p>
-                    <h3>Embedded template</h3>
-                  </div>
-                  <span class="hint-text">
-                    If embed is blocked, use “Open Template”.
-                  </span>
-                </div>
-                <iframe id="template-frame" title="Template preview"></iframe>
-              </section>
-
-              <section class="card info-card">
-                <div class="card-header">
-                  <div>
-                    <p class="section-label">Context</p>
-                    <h3>Template details</h3>
-                  </div>
-                </div>
-                <dl id="template-facts" class="facts-grid"></dl>
-              </section>
-            </div>
-
-            <section class="card review-card">
-              <div class="card-header">
+        <main class="workspace-main">
+          <section class="workspace-card">
+            <div class="page-shell">
+              <header class="hero">
                 <div>
-                  <p class="section-label">Checklist</p>
-                  <h3>Human review fields</h3>
+                  <p class="eyebrow">Adcraft Management Tools <span>/</span> Form Review Dashboard</p>
+                  <h1>Adcraft Form Review Dashboard</h1>
+                  <p class="hero-copy">
+                    Review generated form templates by campaign and day, capture notes,
+                    verify checklist criteria, and jump to L2 when a template needs
+                    escalation.
+                  </p>
                 </div>
-                <button id="mark-reviewed" class="secondary-button" type="button">
-                  Save Review
-                </button>
-              </div>
-
-              <div class="review-grid" id="review-grid"></div>
-
-              <div class="notes-grid">
-                <label class="textarea-wrap">
-                  <span>Review notes</span>
-                  <textarea
-                    id="review-notes"
-                    rows="7"
-                    placeholder="Write what is wrong, what passed, and whether L2 is needed."
-                  ></textarea>
-                </label>
-
-                <div class="review-meta-card">
-                  <label>
-                    <span>Reviewer</span>
-                    <input id="reviewer-name" type="text" placeholder="Reviewer name" />
-                  </label>
-                  <label>
-                    <span>Review decision</span>
-                    <select id="review-decision">
-                      <option value="Pending">Pending</option>
-                      <option value="Pass">Pass</option>
-                      <option value="Needs Fix">Needs Fix</option>
-                      <option value="Escalate L2">Escalate L2</option>
-                    </select>
-                  </label>
-                  <label>
-                    <span>Priority</span>
-                    <input id="review-priority" type="text" placeholder="High, Medium, Low" />
-                  </label>
-                  <div class="timestamp-block">
-                    <span>Last saved</span>
-                    <strong id="review-saved-at">Not saved yet</strong>
+                <div class="hero-actions">
+                  <div id="sync-card" class="sync-card" data-mode="loading">
+                    <strong id="sync-mode">Connecting</strong>
+                    <span id="sync-detail">Checking shared review storage…</span>
                   </div>
+                  <div class="date-range-card">
+                    <p class="date-range-label">Review Filters</p>
+                    <div class="date-range-controls">
+                      <label>
+                        <span>Campaign</span>
+                        <select id="campaign-filter">
+                          <option value="all">All campaigns</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>From</span>
+                        <select id="date-from-filter">
+                          <option value="all">All dates</option>
+                        </select>
+                      </label>
+                      <label>
+                        <span>To</span>
+                        <select id="date-to-filter">
+                          <option value="all">All dates</option>
+                        </select>
+                      </label>
+                    </div>
+                  </div>
+                  <label class="file-picker">
+                    <span id="upload-label">Upload TSV or CSV</span>
+                    <input id="dataset-upload" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
+                  </label>
+                  <button id="export-reviews" class="secondary-button" type="button">
+                    Export Reviews
+                  </button>
+                  <button id="reset-local" class="ghost-button" type="button">
+                    Reload Data
+                  </button>
                 </div>
-              </div>
-            </section>
-          </div>
-        </section>
-      </main>
+              </header>
+
+              <section class="summary-grid" id="summary-grid"></section>
+
+              <main class="dashboard-layout">
+                <aside class="queue-panel">
+                  <div class="panel-header">
+                    <div>
+                      <p class="section-label">Queue</p>
+                      <h2>Templates</h2>
+                    </div>
+                    <span id="queue-count" class="count-pill">0 items</span>
+                  </div>
+
+                  <div class="filters">
+                    <label>
+                      <span>Search</span>
+                      <input id="search-filter" type="search" placeholder="Title, campaign, use case" />
+                    </label>
+                    <label>
+                      <span>Status</span>
+                      <select id="status-filter">
+                        <option value="all">All</option>
+                        <option value="Pending">Pending</option>
+                        <option value="Reviewed">Reviewed</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  <div id="queue-list" class="queue-list"></div>
+                </aside>
+
+                <section class="detail-panel">
+                  <div id="empty-state" class="empty-state">
+                    <p class="section-label">Review Workspace</p>
+                    <h2>Select a template</h2>
+                    <p>
+                      Pick a template from the queue to see the form, add notes, update
+                      review criteria, and open an L2 ticket if needed.
+                    </p>
+                  </div>
+
+                  <div id="detail-view" class="detail-view hidden">
+                    <div class="detail-header">
+                      <div>
+                        <p id="detail-campaign" class="section-label"></p>
+                        <h2 id="detail-title"></h2>
+                        <div id="detail-meta" class="meta-row"></div>
+                      </div>
+                      <div class="detail-actions">
+                        <a id="open-template" class="secondary-button" target="_blank" rel="noreferrer">Open Template</a>
+                        <a id="open-original-template" class="ghost-button" target="_blank" rel="noreferrer">Open Original</a>
+                        <a
+                          id="open-l2-ticket"
+                          class="primary-button"
+                          href="https://support.jotform.com/admn/dashboards/l2-tickets/create/"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open L2 Ticket
+                        </a>
+                      </div>
+                    </div>
+
+                    <div class="detail-grid">
+                      <section class="card preview-card">
+                        <div class="card-header">
+                          <div>
+                            <p class="section-label">Form Preview</p>
+                            <h3>Embedded template</h3>
+                          </div>
+                          <span class="hint-text">
+                            If embed is blocked, use “Open Template”.
+                          </span>
+                        </div>
+                        <iframe id="template-frame" title="Template preview"></iframe>
+                      </section>
+
+                      <section class="card info-card">
+                        <div class="card-header">
+                          <div>
+                            <p class="section-label">Context</p>
+                            <h3>Template details</h3>
+                          </div>
+                        </div>
+                        <dl id="template-facts" class="facts-grid"></dl>
+                      </section>
+                    </div>
+
+                    <section class="card review-card">
+                      <div class="card-header">
+                        <div>
+                          <p class="section-label">Checklist</p>
+                          <h3>Human review fields</h3>
+                        </div>
+                        <button id="mark-reviewed" class="secondary-button" type="button">
+                          Save Review
+                        </button>
+                      </div>
+
+                      <div class="review-grid" id="review-grid"></div>
+
+                      <div class="notes-grid">
+                        <label class="textarea-wrap">
+                          <span>Review notes</span>
+                          <textarea
+                            id="review-notes"
+                            rows="7"
+                            placeholder="Write what is wrong, what passed, and whether L2 is needed."
+                          ></textarea>
+                        </label>
+
+                        <div class="review-meta-card">
+                          <label>
+                            <span>Reviewer</span>
+                            <input id="reviewer-name" type="text" placeholder="Reviewer name" />
+                          </label>
+                          <label>
+                            <span>Review decision</span>
+                            <select id="review-decision">
+                              <option value="Pending">Pending</option>
+                              <option value="Pass">Pass</option>
+                              <option value="Needs Fix">Needs Fix</option>
+                              <option value="Escalate L2">Escalate L2</option>
+                            </select>
+                          </label>
+                          <label>
+                            <span>Priority</span>
+                            <input id="review-priority" type="text" placeholder="High, Medium, Low" />
+                          </label>
+                          <div class="timestamp-block">
+                            <span>Last saved</span>
+                            <strong id="review-saved-at">Not saved yet</strong>
+                          </div>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                </section>
+              </main>
+            </div>
+          </section>
+        </main>
+      </div>
     </div>
 
     <script type="module" src="./app.js"></script>
