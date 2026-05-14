@@ -1,106 +1,144 @@
 # Adcraft Human Review Dashboard
 
-This is a Vercel-ready static dashboard for human review of generated form templates.
+This dashboard is now built for shared human review on Vercel.
 
-## What it does
+## What changed
 
-- Loads review items from a local JSON seed or an uploaded TSV/CSV export
-- Shows a queue filtered by campaign, date, status, and search
-- Embeds the selected form template in an iframe
-- Gives reviewers a notes area and a checklist for:
-  - `Title Review`
-  - `H1 Ends With Form`
-  - `FAQ Review`
-  - `Available Fields`
-  - `Form-Use Case Field`
-  - `Field Count Review`
-  - `Consent Rule Review`
-  - `Sensitive Fields Review`
-- Opens the L2 ticket page from a dedicated button
-- Exports review results to CSV
+- Review data can stay shared across reviewers
+- `Save Review` can write to a shared Supabase-backed store
+- `Upload TSV or CSV` can replace the shared queue for the day
+- The dashboard still falls back to local browser mode when shared storage is not configured yet
 
-## Current persistence model
+## How shared storage works
 
-This first version stores review edits in browser `localStorage`.
+The frontend is still plain `HTML/CSS/JS`, but Vercel now serves three API routes:
 
-That means:
+- `GET /api/data`
+- `POST /api/reviews`
+- `POST /api/dataset`
 
-- fast to ship
-- no backend needed for the MVP
-- not shared across reviewers yet
+Those routes now prefer Supabase for shared persistence and can fall back to a GitHub-backed JSON state when needed.
 
-If you want team-shared notes and review state, the next step is to add a backend data store or sync adapter.
+Primary shared store:
 
-## File structure
+- Supabase table row storage
 
-```text
-review-dashboard/
-  index.html
-  styles.css
-  app.js
-  data/sample-review-items.json
+Optional fallback shared store:
+
+- GitHub-backed JSON state
+
+If you use the GitHub fallback, one important detail:
+
+- shared review commits go to a separate branch by default
+- that branch is `review-data`
+- this avoids triggering a new production deploy on every review save
+
+## Vercel environment variables
+
+Add these in the Vercel project settings for `Adcraft-Review`:
+
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+Recommended optional variables:
+
+- `SUPABASE_TABLE=review_dashboard_state`
+- `SUPABASE_STATE_ROW_ID=primary`
+- `GITHUB_BASE_BRANCH=main`
+- `GITHUB_DATA_BRANCH=review-data`
+- `GITHUB_STATE_PATH=data/review-dashboard-state.json`
+- `GITHUB_TOKEN`
+- `GITHUB_OWNER`
+- `GITHUB_REPO`
+
+## Supabase setup
+
+Run this SQL in the Supabase SQL editor:
+
+```sql
+\i supabase/review_dashboard_state.sql
 ```
 
-## How to use locally
+If the SQL editor does not accept `\i`, paste the contents of:
 
-From the `review-dashboard` directory, run a static server. For example:
+- `supabase/review_dashboard_state.sql`
 
-```bash
-cd /Users/cerenbozada/Documents/Playground/review-dashboard
-python3 -m http.server 4173
-```
+Then add:
 
-Then open:
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
 
-```text
-http://localhost:4173
-```
+The dashboard API uses the service role key on the server side, so reviewers do not need direct database credentials in the browser.
 
-## How to load real review data
+## GitHub fallback
 
-Prepare a TSV or CSV with columns like:
+If you want GitHub as a backup path, create a fine-grained GitHub personal access token with:
 
-- `Template URL`
-- `Original Template Title`
-- `Template ID`
-- `Use Case`
-- `Keyword`
-- `Generated Date`
-- `Campaign Name`
-- `Display Campaign`
-- `Review Status`
-- `Review Decision`
-- `Reviewer`
-- `Reviewed At`
-- `Review Notes`
-- `Priority`
+- repository: `Adcraft-Review`
+- permission: `Contents` set to `Read and write`
 
-Optional review columns already supported:
+Then add:
+
+- `GITHUB_TOKEN`
+- `GITHUB_OWNER=Cerenbdajotform`
+- `GITHUB_REPO=Adcraft-Review`
+
+## Local and shared behavior
+
+When the Supabase environment variables exist:
+
+- the dashboard loads shared data from Supabase
+- uploads replace the shared review queue
+- saves update the shared review state
+
+When Supabase is not configured but the GitHub environment variables exist:
+
+- the dashboard loads shared data from GitHub
+- uploads replace the shared review queue
+- saves update the shared review state
+
+When the environment variables do not exist:
+
+- the dashboard loads bundled seed data
+- review saves stay in browser `localStorage`
+- uploads stay local to that browser session
+
+## Data file
+
+The local seed file is:
+
+- `data/review-dashboard-state.json`
+
+The Supabase schema file is:
+
+- `supabase/review_dashboard_state.sql`
+
+It stores:
+
+- template queue rows
+- review checklist values
+- reviewer notes
+- decision and priority
+- last update metadata
+
+## Current review fields
 
 - `Title Review`
 - `H1 Ends With Form`
 - `FAQ Review`
-- `Available Fields Review`
+- `Available Fields`
 - `Form-Use Case Field`
 - `Field Count Review`
 - `Consent Rule Review`
 - `Sensitive Fields Review`
 
-Use the `Upload TSV or CSV` button in the dashboard to load the file.
+## Deployment
 
-## GitHub and Vercel flow
+The project still deploys on Vercel with the same setup:
 
-1. Create a GitHub repo and push the `review-dashboard` folder.
-2. In Vercel, import that repo.
-3. Set the root directory to `review-dashboard`.
-4. Use the `Other` preset if Vercel asks for a framework.
-5. Leave the build command empty for a pure static deployment.
-6. Deploy.
+- `Application Preset`: `Other`
+- `Root Directory`: `/`
+- `Build Command`: empty
+- `Output Directory`: empty
 
-## Recommended next phase
-
-After the MVP is live, the best upgrade path is:
-
-1. add shared persistence for review notes and statuses
-2. connect the dashboard to your sheet export or internal endpoint
-3. prefill the L2 ticket flow with template context if the L2 page accepts query parameters or a handoff payload
+After adding the Vercel environment variables, redeploy once so the API routes can use them.

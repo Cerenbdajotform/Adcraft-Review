@@ -1,4 +1,10 @@
-const STORAGE_KEY = "adcraft-review-dashboard-state-v1";
+const LOCAL_STORAGE_KEY = "adcraft-review-dashboard-state-v2";
+const PREFERENCES_KEY = "adcraft-review-dashboard-preferences-v1";
+const API_ENDPOINTS = {
+  data: "/api/data",
+  dataset: "/api/dataset",
+  reviews: "/api/reviews",
+};
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
 
@@ -75,8 +81,12 @@ const elements = {
   reviewSavedAt: document.getElementById("review-saved-at"),
   markReviewed: document.getElementById("mark-reviewed"),
   upload: document.getElementById("dataset-upload"),
+  uploadLabel: document.getElementById("upload-label"),
   exportReviews: document.getElementById("export-reviews"),
   resetLocal: document.getElementById("reset-local"),
+  syncCard: document.getElementById("sync-card"),
+  syncMode: document.getElementById("sync-mode"),
+  syncDetail: document.getElementById("sync-detail"),
 };
 
 const state = {
@@ -89,15 +99,29 @@ const state = {
     campaign: "all",
     date: "all",
   },
+  sync: {
+    mode: "loading",
+    canWrite: false,
+    provider: "local",
+    providerLabel: "Local",
+    repo: "",
+    dataBranch: "",
+    updatedAt: "",
+    updatedBy: "",
+    sourceFileName: "",
+    workspace: "",
+    statusMessage: "Checking shared review storage…",
+    tone: "loading",
+  },
+  preferences: {
+    reviewerName: "",
+  },
 };
 
 async function boot() {
-  const response = await fetch("./data/sample-review-items.json");
-  const sampleItems = await response.json();
-  const localState = loadLocalState();
-  state.allItems = mergeLocalEdits(sampleItems, localState);
-  state.selectedId = state.allItems[0]?.id ?? null;
+  loadPreferences();
   bindEvents();
+  await loadDashboardData({ preserveSelection: false });
   render();
 }
 
@@ -122,10 +146,96 @@ function bindEvents() {
     render();
   });
 
+  elements.reviewerName.addEventListener("input", (event) => {
+    state.preferences.reviewerName = event.target.value.trim();
+    persistPreferences();
+  });
+
   elements.markReviewed.addEventListener("click", saveCurrentReview);
   elements.exportReviews.addEventListener("click", exportReviews);
-  elements.resetLocal.addEventListener("click", resetLocalChanges);
+  elements.resetLocal.addEventListener("click", handleResetAction);
   elements.upload.addEventListener("change", handleUpload);
+}
+
+async function loadDashboardData({ preserveSelection = true } = {}) {
+  const previousSelectedId = preserveSelection ? state.selectedId : null;
+
+  setSyncStatus("loading", "Connecting to the review data source…");
+
+  try {
+    const payload = await fetchJson(API_ENDPOINTS.data);
+    applyLoadedItems(payload.items || [], payload, previousSelectedId);
+  } catch (error) {
+    const fallbackPayload = await loadFallbackSeed();
+    const localState = loadLocalState();
+
+    state.allItems = mergeLocalEdits(fallbackPayload.items, localState);
+    state.selectedId =
+      state.allItems.find((item) => item.id === previousSelectedId)?.id ||
+      state.allItems[0]?.id ||
+      null;
+    state.sync = {
+      ...state.sync,
+      canWrite: false,
+      dataBranch: "",
+      mode: "local",
+      provider: "local",
+      providerLabel: "Local",
+      repo: "",
+      sourceFileName: fallbackPayload.sourceFileName || "Bundled seed",
+      statusMessage:
+        "Local preview mode. Reviews are saved only in this browser until shared storage is configured.",
+      tone: "local",
+      updatedAt: fallbackPayload.updatedAt || "",
+      updatedBy: fallbackPayload.updatedBy || "",
+      workspace: "",
+    };
+  }
+}
+
+function applyLoadedItems(items, payload, previousSelectedId) {
+  state.allItems = items.map((item) => prepareItem(item));
+  state.selectedId =
+    state.allItems.find((item) => item.id === previousSelectedId)?.id ||
+    state.allItems[0]?.id ||
+    null;
+  state.sync = {
+    ...state.sync,
+    canWrite: Boolean(payload.canWrite),
+    dataBranch: payload.dataBranch || "",
+    mode: payload.mode || "local",
+    provider: payload.provider || "local",
+    providerLabel: payload.providerLabel || "Local",
+    repo: payload.repo || "",
+    sourceFileName: payload.sourceFileName || "",
+    statusMessage:
+      payload.mode === "shared"
+        ? `Shared ${payload.providerLabel || "review"} sync is active for this dashboard.`
+        : "Local preview mode. Reviews are saved only in this browser.",
+    tone: payload.mode === "shared" ? "shared" : "local",
+    updatedAt: payload.updatedAt || "",
+    updatedBy: payload.updatedBy || "",
+    workspace: payload.workspace || "",
+  };
+}
+
+async function loadFallbackSeed() {
+  try {
+    const payload = await fetchJson("./data/review-dashboard-state.json");
+
+    if (Array.isArray(payload.items)) {
+      return payload;
+    }
+
+    if (Array.isArray(payload)) {
+      return { items: payload, sourceFileName: "Local seed array" };
+    }
+  } catch {
+    const sampleItems = await fetchJson("./data/sample-review-items.json");
+    return { items: sampleItems, sourceFileName: "Sample review items" };
+  }
+
+  return { items: [], sourceFileName: "Empty local state" };
 }
 
 function render() {
@@ -136,6 +246,7 @@ function render() {
   }
 
   renderSummary();
+  renderSyncStatus();
   renderFilterOptions();
   renderQueue();
   renderDetail();
@@ -143,7 +254,9 @@ function render() {
 
 function renderSummary() {
   const total = state.allItems.length;
-  const reviewed = state.allItems.filter((item) => item.reviewStatus === "Reviewed").length;
+  const reviewed = state.allItems.filter(
+    (item) => item.reviewStatus === "Reviewed",
+  ).length;
   const pending = total - reviewed;
   const l2Needed = state.allItems.filter(
     (item) => item.reviewDecision === "Escalate L2",
@@ -169,12 +282,59 @@ function renderSummary() {
     .join("");
 }
 
+function renderSyncStatus() {
+  const detailParts = [];
+
+  if (state.sync.repo) {
+    detailParts.push(state.sync.repo);
+  }
+
+  if (state.sync.dataBranch) {
+    detailParts.push(`branch ${state.sync.dataBranch}`);
+  }
+
+  if (state.sync.updatedAt) {
+    detailParts.push(`updated ${formatDateTime(state.sync.updatedAt)}`);
+  }
+
+  if (state.sync.updatedBy) {
+    detailParts.push(`by ${state.sync.updatedBy}`);
+  }
+
+  if (state.sync.workspace) {
+    detailParts.push(state.sync.workspace.replace(/^https?:\/\//, ""));
+  }
+
+  if (state.sync.sourceFileName) {
+    detailParts.push(state.sync.sourceFileName);
+  }
+
+  const detailText = detailParts.length
+    ? `${state.sync.statusMessage} ${detailParts.join(" • ")}`
+    : state.sync.statusMessage;
+
+  elements.syncCard.dataset.mode = state.sync.tone;
+  elements.syncMode.textContent =
+    state.sync.mode === "shared"
+      ? `Shared ${state.sync.providerLabel} Sync`
+      : "Local Preview Mode";
+  elements.syncDetail.textContent = detailText;
+  elements.uploadLabel.textContent = state.sync.canWrite
+    ? "Upload shared TSV or CSV"
+    : "Upload TSV or CSV";
+  elements.resetLocal.textContent = state.sync.canWrite
+    ? "Reload Shared Data"
+    : "Reset Local Changes";
+}
+
 function renderFilterOptions() {
   syncOptions(
     elements.campaignFilter,
     "all",
     "All campaigns",
-    uniqueValues(state.allItems.map((item) => item.campaignName || item.displayCampaign)).filter(Boolean),
+    uniqueValues(
+      state.allItems.map((item) => item.campaignName || item.displayCampaign),
+    ).filter(Boolean),
     state.filters.campaign,
   );
 
@@ -258,7 +418,8 @@ function renderDetail() {
     .join("");
 
   elements.openTemplate.href = item.templateUrl || "#";
-  elements.openOriginalTemplate.href = item.originalTemplateUrl || item.templateUrl || "#";
+  elements.openOriginalTemplate.href =
+    item.originalTemplateUrl || item.templateUrl || "#";
   elements.openOriginalTemplate.toggleAttribute(
     "aria-disabled",
     !(item.originalTemplateUrl || item.templateUrl),
@@ -270,10 +431,12 @@ function renderDetail() {
   renderChecks(item);
 
   elements.reviewNotes.value = item.reviewNotes || "";
-  elements.reviewerName.value = item.reviewer || "";
+  elements.reviewerName.value = item.reviewer || state.preferences.reviewerName || "";
   elements.reviewDecision.value = item.reviewDecision || "Pending";
   elements.reviewPriority.value = item.priority || "";
-  elements.reviewSavedAt.textContent = item.reviewedAt || "Not saved yet";
+  elements.reviewSavedAt.textContent = item.reviewedAt
+    ? formatDateTime(item.reviewedAt)
+    : "Not saved yet";
 }
 
 function renderFacts(item) {
@@ -324,43 +487,149 @@ function renderCheckOptions(selectedValue) {
     .join("");
 }
 
-function saveCurrentReview() {
+async function saveCurrentReview() {
   const item = state.allItems.find((entry) => entry.id === state.selectedId);
+
   if (!item) return;
 
-  const checks = { ...item.checks };
+  const previousItem = JSON.parse(JSON.stringify(item));
+  const reviewPayload = collectReviewPayload();
+  const optimisticItem = prepareItem({
+    ...item,
+    ...reviewPayload,
+    reviewStatus: reviewPayload.reviewDecision === "Pending" ? "Pending" : "Reviewed",
+  });
+
+  replaceItemInState(optimisticItem);
+  persistPreferences();
+  render();
+
+  elements.markReviewed.disabled = true;
+  elements.markReviewed.textContent = state.sync.canWrite
+    ? "Saving…"
+    : "Saved Locally";
+
+  try {
+    if (state.sync.canWrite) {
+      setSyncStatus("shared", "Saving review to the shared dashboard…");
+
+      const payload = await postJson(API_ENDPOINTS.reviews, {
+        itemId: optimisticItem.id,
+        review: reviewPayload,
+      });
+
+      replaceItemInState(prepareItem(payload.item));
+      state.sync.updatedAt = payload.savedAt || new Date().toISOString();
+      state.sync.updatedBy = reviewPayload.reviewer;
+      setSyncStatus("shared", "Review saved to the shared dashboard.");
+    } else {
+      persistLocalState(state.allItems);
+      state.sync.updatedAt = reviewPayload.reviewedAt;
+      state.sync.updatedBy = reviewPayload.reviewer;
+      setSyncStatus(
+        "local",
+        "Review saved locally in this browser. Configure shared storage to share it with the team.",
+      );
+    }
+  } catch (error) {
+    replaceItemInState(previousItem);
+    setSyncStatus(
+      "error",
+      error.message || "Could not save the review. Please try again.",
+    );
+  } finally {
+    elements.markReviewed.disabled = false;
+    elements.markReviewed.textContent = "Save Review";
+    render();
+  }
+}
+
+function collectReviewPayload() {
+  const checks = {};
+
   elements.reviewGrid.querySelectorAll("[data-check-key]").forEach((select) => {
     checks[select.dataset.checkKey] = select.value;
   });
 
-  const reviewedAt = new Date().toISOString().slice(0, 10);
   const reviewDecision = elements.reviewDecision.value;
+  const reviewer = elements.reviewerName.value.trim();
 
-  Object.assign(item, {
+  state.preferences.reviewerName = reviewer;
+
+  return {
     checks,
-    reviewNotes: elements.reviewNotes.value.trim(),
-    reviewer: elements.reviewerName.value.trim(),
-    reviewDecision,
     priority: elements.reviewPriority.value.trim(),
-    reviewedAt,
+    reviewDecision,
+    reviewNotes: elements.reviewNotes.value.trim(),
+    reviewedAt: new Date().toISOString(),
+    reviewer,
     reviewStatus: reviewDecision === "Pending" ? "Pending" : "Reviewed",
-  });
-
-  persistLocalState(state.allItems);
-  render();
+  };
 }
 
-function handleUpload(event) {
+async function handleUpload(event) {
   const [file] = event.target.files || [];
+
   if (!file) return;
 
-  file.text().then((text) => {
+  try {
+    const text = await file.text();
     const parsedItems = parseDelimitedDataset(text, file.name);
-    const localState = loadLocalState();
-    state.allItems = mergeLocalEdits(parsedItems, localState);
-    state.selectedId = state.allItems[0]?.id ?? null;
+
+    if (!parsedItems.length) {
+      throw new Error("No review rows were found in the uploaded file.");
+    }
+
+    if (state.sync.canWrite) {
+      setSyncStatus("shared", `Uploading ${file.name} to the shared dashboard…`);
+
+      const payload = await postJson(API_ENDPOINTS.dataset, {
+        fileName: file.name,
+        items: parsedItems,
+        uploadedBy:
+          elements.reviewerName.value.trim() || state.preferences.reviewerName,
+      });
+
+      state.allItems = payload.items.map((item) => prepareItem(item));
+      state.selectedId = state.allItems[0]?.id || null;
+      state.sync.updatedAt = new Date().toISOString();
+      state.sync.updatedBy =
+        elements.reviewerName.value.trim() || state.preferences.reviewerName;
+      state.sync.sourceFileName = file.name;
+      setSyncStatus(
+        "shared",
+        `Uploaded ${payload.uploadedCount} templates to the shared dashboard.`,
+      );
+    } else {
+      const localState = loadLocalState();
+      state.allItems = mergeLocalEdits(parsedItems, localState);
+      state.selectedId = state.allItems[0]?.id || null;
+      setSyncStatus(
+        "local",
+        `Loaded ${parsedItems.length} templates locally. This upload is only visible in your browser.`,
+      );
+    }
+  } catch (error) {
+    setSyncStatus(
+      "error",
+      error.message || "Could not process the uploaded dataset.",
+    );
+  } finally {
+    elements.upload.value = "";
     render();
-  });
+  }
+}
+
+async function handleResetAction() {
+  if (state.sync.canWrite) {
+    await loadDashboardData();
+    render();
+    return;
+  }
+
+  localStorage.removeItem(LOCAL_STORAGE_KEY);
+  await loadDashboardData();
+  render();
 }
 
 function parseDelimitedDataset(text, fileName) {
@@ -374,74 +643,117 @@ function parseDelimitedDataset(text, fileName) {
 
   const headers = rows[0].map((header) => header.trim());
 
-  return rows.slice(1).map((cells, index) => {
-    const row = Object.fromEntries(headers.map((header, headerIndex) => [header, cells[headerIndex] || ""]));
-    return normalizeRow(row, index);
-  }).filter((item) => item.templateUrl || item.title || item.useCase);
+  return rows
+    .slice(1)
+    .map((cells, index) => {
+      const row = Object.fromEntries(
+        headers.map((header, headerIndex) => [header, cells[headerIndex] || ""]),
+      );
+      return normalizeRow(row, index);
+    })
+    .filter((item) => item.templateUrl || item.title || item.useCase);
 }
 
 function normalizeRow(row, index = 0) {
-  const templateUrl = row["Template URL"] || row["templateUrl"] || row["URL"] || "";
+  const templateUrl = row["Template URL"] || row.templateUrl || row.URL || "";
   const title =
     row["Original Template Title"] ||
     row["Template Title"] ||
-    row["title"] ||
-    row["Name"] ||
+    row.title ||
+    row.Name ||
     "";
 
-  return {
-    id:
-      row["Template ID"] ||
-      row["templateId"] ||
-      row["ID"] ||
-      templateUrl ||
-      `${title}-${index}`,
-    templateId: row["Template ID"] || row["templateId"] || "",
-    templateUrl,
-    title,
-    originalTemplateUrl:
-      row["Original Template URL"] || row["originalTemplateUrl"] || "",
-    formId: row["Form ID"] || row["formId"] || "",
-    sourceForm: row["Source Form"] || row["sourceForm"] || "",
-    useCase: row["Use Case"] || row["useCase"] || "",
-    keyword: row["Keyword"] || row["keyword"] || "",
-    generatedDate: row["Generated Date"] || row["generatedDate"] || "",
-    campaignName: row["Campaign Name"] || row["campaignName"] || "",
-    displayCampaign: row["Display Campaign"] || row["displayCampaign"] || "",
-    priority: row["Priority"] || row["priority"] || "",
-    reviewStatus: row["Review Status"] || row["reviewStatus"] || "Pending",
-    reviewDecision: row["Review Decision"] || row["reviewDecision"] || "Pending",
-    reviewer: row["Reviewer"] || row["reviewer"] || "",
-    reviewedAt: row["Reviewed At"] || row["reviewedAt"] || "",
-    reviewNotes: row["Review Notes"] || row["reviewNotes"] || "",
+  return prepareItem({
+    campaignName: row["Campaign Name"] || row.campaignName || "",
     checks: {
-      titleReview: row["Title Review"] || row["titleReview"] || "Pending",
+      titleReview: row["Title Review"] || row.titleReview || "Pending",
       h1EndsWithForm:
-        row["H1 Ends With Form"] || row["h1EndsWithForm"] || "Pending",
-      faqReview: row["FAQ Review"] || row["faqReview"] || "Pending",
+        row["H1 Ends With Form"] || row.h1EndsWithForm || "Pending",
+      faqReview: row["FAQ Review"] || row.faqReview || "Pending",
       availableFieldsReview:
         row["Available Fields Review"] ||
-        row["availableFieldsReview"] ||
+        row.availableFieldsReview ||
         "Pending",
       formUseCaseReview:
         row["Form-Use Case Field"] ||
         row["Form-Use Case Review"] ||
-        row["formUseCaseReview"] ||
+        row.formUseCaseReview ||
         "Pending",
       fieldCountReview:
-        row["Field Count Review"] || row["fieldCountReview"] || "Pending",
+        row["Field Count Review"] || row.fieldCountReview || "Pending",
       consentRuleReview:
         row["Consent Rule Review"] ||
         row["Consent Rule"] ||
-        row["consentRuleReview"] ||
+        row.consentRuleReview ||
         "Pending",
       sensitiveFieldsReview:
         row["Sensitive Fields Review"] ||
         row["Sensitive Fields"] ||
-        row["sensitiveFieldsReview"] ||
+        row.sensitiveFieldsReview ||
         "Pending",
     },
+    displayCampaign: row["Display Campaign"] || row.displayCampaign || "",
+    formId: row["Form ID"] || row.formId || "",
+    generatedDate: row["Generated Date"] || row.generatedDate || "",
+    id:
+      row["Template ID"] ||
+      row.templateId ||
+      row.ID ||
+      templateUrl ||
+      `${title}-${index}`,
+    keyword: row.Keyword || row.keyword || "",
+    originalTemplateUrl:
+      row["Original Template URL"] || row.originalTemplateUrl || "",
+    priority: row.Priority || row.priority || "",
+    reviewDecision: row["Review Decision"] || row.reviewDecision || "Pending",
+    reviewNotes: row["Review Notes"] || row.reviewNotes || "",
+    reviewStatus: row["Review Status"] || row.reviewStatus || "Pending",
+    reviewedAt: row["Reviewed At"] || row.reviewedAt || "",
+    reviewer: row.Reviewer || row.reviewer || "",
+    sourceForm: row["Source Form"] || row.sourceForm || "",
+    templateId: row["Template ID"] || row.templateId || "",
+    templateUrl,
+    title,
+    useCase: row["Use Case"] || row.useCase || "",
+  });
+}
+
+function prepareItem(item) {
+  const reviewDecision = normalizeReviewDecision(item.reviewDecision);
+
+  return {
+    id: String(item.id || item.templateId || item.templateUrl || "").trim(),
+    templateId: String(item.templateId || "").trim(),
+    templateUrl: String(item.templateUrl || "").trim(),
+    title: String(item.title || "").trim(),
+    originalTemplateUrl: String(item.originalTemplateUrl || "").trim(),
+    formId: String(item.formId || "").trim(),
+    sourceForm: String(item.sourceForm || "").trim(),
+    useCase: String(item.useCase || "").trim(),
+    keyword: String(item.keyword || "").trim(),
+    generatedDate: String(item.generatedDate || "").trim(),
+    campaignName: String(item.campaignName || "").trim(),
+    displayCampaign: String(item.displayCampaign || "").trim(),
+    priority: String(item.priority || "").trim(),
+    reviewStatus:
+      item.reviewStatus === "Reviewed" || reviewDecision !== "Pending"
+        ? "Reviewed"
+        : "Pending",
+    reviewDecision,
+    reviewer: String(item.reviewer || "").trim(),
+    reviewedAt: String(item.reviewedAt || "").trim(),
+    reviewNotes: String(item.reviewNotes || "").trim(),
+    checks: {
+      ...DEFAULT_CHECKS,
+      ...(item.checks || {}),
+    },
   };
+}
+
+function normalizeReviewDecision(value) {
+  return ["Pending", "Pass", "Needs Fix", "Escalate L2"].includes(value)
+    ? value
+    : "Pending";
 }
 
 function splitDelimitedRow(row, delimiter) {
@@ -521,23 +833,34 @@ function exportReviews() {
   const csv = [
     headers.join(","),
     ...rows.map((row) =>
-      headers
-        .map((header) => csvEscape(row[header] ?? ""))
-        .join(","),
+      headers.map((header) => csvEscape(row[header] ?? "")).join(","),
     ),
   ].join("\n");
 
   downloadText("adcraft-review-export.csv", csv, "text/csv");
 }
 
-function resetLocalChanges() {
-  localStorage.removeItem(STORAGE_KEY);
-  window.location.reload();
+function loadPreferences() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
+    state.preferences.reviewerName = saved.reviewerName || "";
+  } catch {
+    state.preferences.reviewerName = "";
+  }
+}
+
+function persistPreferences() {
+  localStorage.setItem(
+    PREFERENCES_KEY,
+    JSON.stringify({
+      reviewerName: state.preferences.reviewerName,
+    }),
+  );
 }
 
 function loadLocalState() {
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+    return JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || "{}");
   } catch {
     return {};
   }
@@ -559,25 +882,34 @@ function persistLocalState(items) {
     ]),
   );
 
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
 }
 
 function mergeLocalEdits(items, localState) {
   return items.map((item) => {
-    const local = localState[item.id];
+    const preparedItem = prepareItem(item);
+    const local = localState[preparedItem.id];
+
     if (!local) {
-      return {
-        ...item,
-        checks: { ...DEFAULT_CHECKS, ...item.checks },
-      };
+      return preparedItem;
     }
 
-    return {
-      ...item,
+    return prepareItem({
+      ...preparedItem,
       ...local,
-      checks: { ...DEFAULT_CHECKS, ...item.checks, ...local.checks },
-    };
+      checks: { ...preparedItem.checks, ...(local.checks || {}) },
+    });
   });
+}
+
+function replaceItemInState(nextItem) {
+  const itemIndex = state.allItems.findIndex((item) => item.id === nextItem.id);
+
+  if (itemIndex === -1) {
+    return;
+  }
+
+  state.allItems.splice(itemIndex, 1, prepareItem(nextItem));
 }
 
 function syncOptions(select, allValue, allLabel, options, currentValue) {
@@ -615,6 +947,57 @@ function downloadText(fileName, text, mimeType) {
   link.download = fileName;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    headers: {
+      Accept: "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const contentType = response.headers.get("content-type") || "";
+  const payload = contentType.includes("application/json")
+    ? await response.json()
+    : null;
+
+  if (!response.ok) {
+    throw new Error(payload?.error || `Request failed with ${response.status}.`);
+  }
+
+  return payload;
+}
+
+async function postJson(url, body) {
+  return fetchJson(url, {
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+    },
+    method: "POST",
+  });
+}
+
+function setSyncStatus(tone, message) {
+  state.sync.tone = tone;
+  state.sync.statusMessage = message;
+}
+
+function formatDateTime(value) {
+  if (!value) return "";
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: value.includes("T") ? "short" : undefined,
+  });
 }
 
 function escapeHtml(value) {

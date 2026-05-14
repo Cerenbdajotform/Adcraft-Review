@@ -19,15 +19,19 @@
           </p>
         </div>
         <div class="hero-actions">
+          <div id="sync-card" class="sync-card" data-mode="loading">
+            <strong id="sync-mode">Connecting</strong>
+            <span id="sync-detail">Checking shared review storage…</span>
+          </div>
           <label class="file-picker">
-            <span>Upload TSV or CSV</span>
+            <span id="upload-label">Upload TSV or CSV</span>
             <input id="dataset-upload" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
           </label>
           <button id="export-reviews" class="secondary-button" type="button">
             Export Reviews
           </button>
           <button id="reset-local" class="ghost-button" type="button">
-            Reset Local Changes
+            Reload Data
           </button>
         </div>
       </header>
