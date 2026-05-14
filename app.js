@@ -62,7 +62,8 @@ const elements = {
   searchFilter: document.getElementById("search-filter"),
   statusFilter: document.getElementById("status-filter"),
   campaignFilter: document.getElementById("campaign-filter"),
-  dateFilter: document.getElementById("date-filter"),
+  dateFromFilter: document.getElementById("date-from-filter"),
+  dateToFilter: document.getElementById("date-to-filter"),
   emptyState: document.getElementById("empty-state"),
   detailView: document.getElementById("detail-view"),
   detailCampaign: document.getElementById("detail-campaign"),
@@ -97,7 +98,8 @@ const state = {
     search: "",
     status: "all",
     campaign: "all",
-    date: "all",
+    dateFrom: "all",
+    dateTo: "all",
   },
   sync: {
     mode: "loading",
@@ -141,8 +143,31 @@ function bindEvents() {
     render();
   });
 
-  elements.dateFilter.addEventListener("change", (event) => {
-    state.filters.date = event.target.value;
+  elements.dateFromFilter.addEventListener("change", (event) => {
+    state.filters.dateFrom = event.target.value;
+
+    if (
+      state.filters.dateFrom !== "all" &&
+      state.filters.dateTo !== "all" &&
+      state.filters.dateFrom > state.filters.dateTo
+    ) {
+      state.filters.dateTo = state.filters.dateFrom;
+    }
+
+    render();
+  });
+
+  elements.dateToFilter.addEventListener("change", (event) => {
+    state.filters.dateTo = event.target.value;
+
+    if (
+      state.filters.dateFrom !== "all" &&
+      state.filters.dateTo !== "all" &&
+      state.filters.dateTo < state.filters.dateFrom
+    ) {
+      state.filters.dateFrom = state.filters.dateTo;
+    }
+
     render();
   });
 
@@ -328,6 +353,10 @@ function renderSyncStatus() {
 }
 
 function renderFilterOptions() {
+  const dateOptions = sortDateKeys(
+    uniqueValues(state.allItems.map((item) => item.generatedDate)).filter(Boolean),
+  );
+
   syncOptions(
     elements.campaignFilter,
     "all",
@@ -339,11 +368,19 @@ function renderFilterOptions() {
   );
 
   syncOptions(
-    elements.dateFilter,
+    elements.dateFromFilter,
     "all",
     "All dates",
-    uniqueValues(state.allItems.map((item) => item.generatedDate)).filter(Boolean),
-    state.filters.date,
+    dateOptions,
+    state.filters.dateFrom,
+  );
+
+  syncOptions(
+    elements.dateToFilter,
+    "all",
+    "All dates",
+    dateOptions,
+    state.filters.dateTo,
   );
 }
 
@@ -651,20 +688,24 @@ function parseDelimitedDataset(text, fileName) {
       );
       return normalizeRow(row, index);
     })
-    .filter((item) => item.templateUrl || item.title || item.useCase);
+    .filter((item) => item.templateUrl || item.originalTemplateUrl);
 }
 
 function normalizeRow(row, index = 0) {
   const templateUrl = row["Template URL"] || row.templateUrl || row.URL || "";
+  const useCase = row["Use Case"] || row.useCase || "";
   const title =
     row["Original Template Title"] ||
     row["Template Title"] ||
     row.title ||
     row.Name ||
-    "";
+    useCase ||
+    titleFromTemplateUrl(templateUrl);
+  const campaignId = row["Campaign ID"] || row.campaignId || "";
+  const createdAt = row["Created At"] || row.createdAt || "";
 
   return prepareItem({
-    campaignName: row["Campaign Name"] || row.campaignName || "",
+    campaignName: row["Campaign Name"] || row.campaignName || campaignId,
     checks: {
       titleReview: row["Title Review"] || row.titleReview || "Pending",
       h1EndsWithForm:
@@ -692,9 +733,13 @@ function normalizeRow(row, index = 0) {
         row.sensitiveFieldsReview ||
         "Pending",
     },
-    displayCampaign: row["Display Campaign"] || row.displayCampaign || "",
+    displayCampaign:
+      row["Display Campaign"] || row.displayCampaign || campaignId,
     formId: row["Form ID"] || row.formId || "",
-    generatedDate: row["Generated Date"] || row.generatedDate || "",
+    generatedDate:
+      row["Generated Date"] ||
+      row.generatedDate ||
+      normalizeGeneratedDate(createdAt),
     id:
       row["Template ID"] ||
       row.templateId ||
@@ -714,7 +759,7 @@ function normalizeRow(row, index = 0) {
     templateId: row["Template ID"] || row.templateId || "",
     templateUrl,
     title,
-    useCase: row["Use Case"] || row.useCase || "",
+    useCase,
   });
 }
 
@@ -801,10 +846,19 @@ function applyFilters(items, filters) {
     const matchesCampaign =
       filters.campaign === "all" ||
       (item.campaignName || item.displayCampaign) === filters.campaign;
-    const matchesDate =
-      filters.date === "all" || item.generatedDate === filters.date;
+    const itemDate = normalizeGeneratedDate(item.generatedDate);
+    const matchesDateFrom =
+      filters.dateFrom === "all" || (itemDate && itemDate >= filters.dateFrom);
+    const matchesDateTo =
+      filters.dateTo === "all" || (itemDate && itemDate <= filters.dateTo);
 
-    return matchesSearch && matchesStatus && matchesCampaign && matchesDate;
+    return (
+      matchesSearch &&
+      matchesStatus &&
+      matchesCampaign &&
+      matchesDateFrom &&
+      matchesDateTo
+    );
   });
 }
 
@@ -929,6 +983,43 @@ function syncOptions(select, allValue, allLabel, options, currentValue) {
 
 function uniqueValues(values) {
   return [...new Set(values)];
+}
+
+function sortDateKeys(values) {
+  return [...values].sort((left, right) => {
+    const normalizedLeft = normalizeGeneratedDate(left);
+    const normalizedRight = normalizeGeneratedDate(right);
+    return normalizedLeft.localeCompare(normalizedRight);
+  });
+}
+
+function normalizeGeneratedDate(value) {
+  if (!value) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function titleFromTemplateUrl(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    const slug = pathname.split("/").filter(Boolean).pop() || "";
+
+    return slug
+      .replace(/-/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  } catch {
+    return "";
+  }
 }
 
 function csvEscape(value) {

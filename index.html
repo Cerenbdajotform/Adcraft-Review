@@ -23,6 +23,23 @@
             <strong id="sync-mode">Connecting</strong>
             <span id="sync-detail">Checking shared review storage…</span>
           </div>
+          <div class="date-range-card">
+            <p class="date-range-label">Date Range</p>
+            <div class="date-range-controls">
+              <label>
+                <span>From</span>
+                <select id="date-from-filter">
+                  <option value="all">All dates</option>
+                </select>
+              </label>
+              <label>
+                <span>To</span>
+                <select id="date-to-filter">
+                  <option value="all">All dates</option>
+                </select>
+              </label>
+            </div>
+          </div>
           <label class="file-picker">
             <span id="upload-label">Upload TSV or CSV</span>
             <input id="dataset-upload" type="file" accept=".csv,.tsv,text/csv,text/tab-separated-values" />
@@ -65,12 +82,6 @@
               <span>Campaign</span>
               <select id="campaign-filter">
                 <option value="all">All campaigns</option>
-              </select>
-            </label>
-            <label>
-              <span>Date</span>
-              <select id="date-filter">
-                <option value="all">All dates</option>
               </select>
             </label>
           </div>

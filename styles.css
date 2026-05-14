@@ -150,6 +150,42 @@ button:hover,
   justify-content: flex-end;
 }
 
+.date-range-card {
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: var(--card-shadow);
+  display: grid;
+  gap: 0.65rem;
+  min-width: 320px;
+  padding: 0.85rem 1rem;
+}
+
+.date-range-label {
+  color: var(--warm);
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.date-range-controls {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.date-range-controls label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.date-range-controls span {
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+}
+
 .sync-card {
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--line);
@@ -555,6 +591,10 @@ textarea {
   .review-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .date-range-card {
+    min-width: 100%;
+  }
 }
 
 @media (max-width: 720px) {
@@ -564,7 +604,8 @@ textarea {
 
   .summary-grid,
   .review-grid,
-  .facts-grid {
+  .facts-grid,
+  .date-range-controls {
     grid-template-columns: 1fr;
   }
 
