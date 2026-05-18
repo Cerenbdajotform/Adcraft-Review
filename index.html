@@ -73,8 +73,8 @@
                   <p class="eyebrow">Adcraft Management Tools <span>/</span> Form Review Dashboard</p>
                   <h1>Adcraft Form Review Dashboard</h1>
                   <p class="hero-copy">
-                    Review generated form templates by campaign and day, capture notes,
-                    verify checklist criteria, and jump to L2 when a template needs
+                    Review generated form templates by campaign and day, assign owners,
+                    save final decisions, and jump to L2 when a template needs
                     escalation.
                   </p>
                 </div>
@@ -154,8 +154,8 @@
                     <p class="section-label">Review Workspace</p>
                     <h2>Select a template</h2>
                     <p>
-                      Pick a template from the queue to see the form, add notes, update
-                      review criteria, and open an L2 ticket if needed.
+                      Pick a template from the queue to see the form, assign an owner,
+                      save the final decision, and open an L2 ticket if needed.
                     </p>
                   </div>
 
@@ -195,43 +195,53 @@
                         <iframe id="template-frame" title="Template preview"></iframe>
                       </section>
 
-                      <section class="card info-card">
+                      <section class="card review-card">
                         <div class="card-header">
                           <div>
-                            <p class="section-label">Context</p>
-                            <h3>Template details</h3>
+                            <p class="section-label">Review</p>
+                            <h3>Final decision</h3>
+                          </div>
+                          <div class="review-actions">
+                            <button id="next-template" class="ghost-button" type="button">
+                              Next Template
+                            </button>
+                            <button id="mark-reviewed" class="secondary-button" type="button">
+                              Save Review
+                            </button>
                           </div>
                         </div>
-                        <dl id="template-facts" class="facts-grid"></dl>
+
+                        <div class="review-meta-card review-meta-card--compact">
+                          <label>
+                            <span>Final Decision</span>
+                            <select id="review-decision">
+                              <option value="Pending">Pending</option>
+                              <option value="Pass">Pass</option>
+                              <option value="Needs Fix">Needs Fix</option>
+                              <option value="Escalate L2">Escalate L2</option>
+                            </select>
+                          </label>
+                          <label>
+                            <span>Assignee</span>
+                            <select id="reviewer-name">
+                              <option value="Ceren">Ceren</option>
+                              <option value="Batuhan">Batuhan</option>
+                              <option value="Buğçe">Buğçe</option>
+                              <option value="Mehmet">Mehmet</option>
+                            </select>
+                          </label>
+                        </div>
                       </section>
                     </div>
 
-                    <section class="card review-card">
+                    <section class="card info-card">
                       <div class="card-header">
                         <div>
-                          <p class="section-label">Review</p>
-                          <h3>Final decision</h3>
+                          <p class="section-label">Context</p>
+                          <h3>Template details</h3>
                         </div>
-                        <button id="mark-reviewed" class="secondary-button" type="button">
-                          Save Review
-                        </button>
                       </div>
-
-                      <div class="review-meta-card review-meta-card--compact">
-                        <label>
-                          <span>Final Decision</span>
-                          <select id="review-decision">
-                            <option value="Pending">Pending</option>
-                            <option value="Pass">Pass</option>
-                            <option value="Needs Fix">Needs Fix</option>
-                            <option value="Escalate L2">Escalate L2</option>
-                          </select>
-                        </label>
-                        <label>
-                          <span>Assignee</span>
-                          <input id="reviewer-name" type="text" placeholder="Assignee name" />
-                        </label>
-                      </div>
+                      <dl id="template-facts" class="facts-grid"></dl>
                     </section>
                   </div>
                 </section>

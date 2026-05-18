@@ -633,6 +633,7 @@ textarea {
 }
 
 .detail-grid {
+  align-items: start;
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1.4fr) minmax(320px, 0.9fr);
@@ -685,8 +686,16 @@ textarea {
 }
 
 .review-card {
+  align-self: start;
   display: grid;
   gap: 1rem;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  justify-content: flex-end;
 }
 
 .review-meta-card {
@@ -699,7 +708,7 @@ textarea {
 }
 
 .review-meta-card--compact {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: 1fr;
 }
 
 .empty-state {

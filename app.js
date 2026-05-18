@@ -7,6 +7,8 @@ const API_ENDPOINTS = {
 };
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
+const DEFAULT_ASSIGNEE = "Ceren";
+const ASSIGNEE_OPTIONS = ["Ceren", "Batuhan", "Buğçe", "Mehmet"];
 
 const DEFAULT_CHECKS = {
   h1CorrectReview: "Pending",
@@ -59,6 +61,7 @@ const elements = {
   openTemplate: document.getElementById("open-template"),
   openOriginalTemplate: document.getElementById("open-original-template"),
   openL2Ticket: document.getElementById("open-l2-ticket"),
+  nextTemplate: document.getElementById("next-template"),
   reviewerName: document.getElementById("reviewer-name"),
   reviewDecision: document.getElementById("review-decision"),
   markReviewed: document.getElementById("mark-reviewed"),
@@ -97,12 +100,13 @@ const state = {
     tone: "loading",
   },
   preferences: {
-    reviewerName: "",
+    reviewerName: DEFAULT_ASSIGNEE,
   },
 };
 
 async function boot() {
   loadPreferences();
+  syncAssigneeOptions(state.preferences.reviewerName);
   bindEvents();
   await loadDashboardData({ preserveSelection: false });
   render();
@@ -152,15 +156,33 @@ function bindEvents() {
     render();
   });
 
-  elements.reviewerName.addEventListener("input", (event) => {
+  elements.reviewerName.addEventListener("change", (event) => {
     state.preferences.reviewerName = event.target.value.trim();
     persistPreferences();
   });
 
+  elements.nextTemplate.addEventListener("click", goToNextTemplate);
   elements.markReviewed.addEventListener("click", saveCurrentReview);
   elements.exportReviews.addEventListener("click", exportReviews);
   elements.resetLocal.addEventListener("click", handleResetAction);
   elements.upload.addEventListener("change", handleUpload);
+}
+
+function syncAssigneeOptions(preferredValue = DEFAULT_ASSIGNEE) {
+  const normalizedValue = String(preferredValue || DEFAULT_ASSIGNEE).trim() || DEFAULT_ASSIGNEE;
+  const options = [...ASSIGNEE_OPTIONS];
+
+  if (!options.includes(normalizedValue)) {
+    options.push(normalizedValue);
+  }
+
+  elements.reviewerName.innerHTML = options
+    .map(
+      (assignee) =>
+        `<option value="${escapeHtml(assignee)}">${escapeHtml(assignee)}</option>`,
+    )
+    .join("");
+  elements.reviewerName.value = normalizedValue;
 }
 
 async function loadDashboardData({ preserveSelection = true } = {}) {
@@ -415,6 +437,7 @@ function renderDetail() {
   if (!item) {
     elements.emptyState.classList.remove("hidden");
     elements.detailView.classList.add("hidden");
+    elements.nextTemplate.disabled = true;
     return;
   }
 
@@ -428,7 +451,7 @@ function renderDetail() {
     item.generatedDate,
     item.reviewStatus,
     item.reviewDecision,
-    item.reviewer || "No assignee",
+    item.reviewer || state.preferences.reviewerName || DEFAULT_ASSIGNEE,
   ]
     .filter(Boolean)
     .map((value) => `<span class="meta-chip">${escapeHtml(value)}</span>`)
@@ -445,8 +468,11 @@ function renderDetail() {
   elements.templateFrame.src = item.templateUrl || "about:blank";
 
   renderFacts(item);
-  elements.reviewerName.value = item.reviewer || state.preferences.reviewerName || "";
+  syncAssigneeOptions(
+    item.reviewer || state.preferences.reviewerName || DEFAULT_ASSIGNEE,
+  );
   elements.reviewDecision.value = item.reviewDecision || "Pending";
+  elements.nextTemplate.disabled = getNextFilteredItemId(item.id) === null;
 }
 
 function renderFacts(item) {
@@ -532,7 +558,8 @@ async function saveCurrentReview() {
 
 function collectReviewPayload() {
   const reviewDecision = elements.reviewDecision.value;
-  const reviewer = elements.reviewerName.value.trim();
+  const reviewer =
+    String(elements.reviewerName.value || DEFAULT_ASSIGNEE).trim() || DEFAULT_ASSIGNEE;
 
   state.preferences.reviewerName = reviewer;
 
@@ -542,6 +569,25 @@ function collectReviewPayload() {
     reviewer,
     reviewStatus: reviewDecision === "Pending" ? "Pending" : "Reviewed",
   };
+}
+
+function getNextFilteredItemId(currentId) {
+  const currentIndex = state.filteredItems.findIndex((item) => item.id === currentId);
+
+  if (currentIndex === -1 || currentIndex >= state.filteredItems.length - 1) {
+    return null;
+  }
+
+  return state.filteredItems[currentIndex + 1].id;
+}
+
+function goToNextTemplate() {
+  const nextId = getNextFilteredItemId(state.selectedId);
+
+  if (!nextId) return;
+
+  state.selectedId = nextId;
+  render();
 }
 
 async function handleUpload(event) {
@@ -825,9 +871,9 @@ function exportReviews() {
 function loadPreferences() {
   try {
     const saved = JSON.parse(localStorage.getItem(PREFERENCES_KEY) || "{}");
-    state.preferences.reviewerName = saved.reviewerName || "";
+    state.preferences.reviewerName = saved.reviewerName || DEFAULT_ASSIGNEE;
   } catch {
-    state.preferences.reviewerName = "";
+    state.preferences.reviewerName = DEFAULT_ASSIGNEE;
   }
 }
 
