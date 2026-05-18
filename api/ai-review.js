@@ -109,11 +109,7 @@ async function analyzeTemplate({
   const lang = extractLang(templateHtml) || "en";
   const metaDescription = extractMetaContent(templateHtml, "description");
   const robots = extractMetaContent(templateHtml, "robots");
-  const overviewSection = extractSectionBetween(
-    templateHtml,
-    'data-tab="overview"',
-    'data-tab="available-fields"',
-  );
+  const overviewSection = extractAboutSection(templateHtml);
   const availableFieldsSection = extractSectionBetween(
     templateHtml,
     'data-tab="available-fields"',
@@ -124,9 +120,13 @@ async function analyzeTemplate({
     'data-tab="faq"',
     '<div aria-roledescription="carousel"',
   );
+  const jsonLdEntries = extractJsonLdEntries(templateHtml);
   const aboutParagraphs = extractParagraphs(overviewSection);
   const aboutLength = aboutParagraphs.join(" ").length;
-  const faqPairs = extractFaqPairs(faqSection);
+  const faqPairs = extractFaqPairs(faqSection).length
+    ? extractFaqPairs(faqSection)
+    : extractFaqPairsFromJsonLd(jsonLdEntries);
+  const jsonLdFieldNames = extractFieldNamesFromJsonLd(jsonLdEntries);
   const previewPath = extractPreviewPath(templateHtml);
   const previewCandidates = buildPreviewCandidates({
     formId,
@@ -192,9 +192,13 @@ async function analyzeTemplate({
   );
   const hasProductList =
     /product list/i.test(availableFieldsSection) ||
+    jsonLdFieldNames.some((fieldName) => /product/i.test(fieldName)) ||
     /data-type="control_paypal"|data-type="control_payment"|product-container-wrapper/i.test(
       previewHtml,
     );
+  const hasAvailableFields =
+    jsonLdFieldNames.length > 0 ||
+    /<li\b|<span\b|<div\b/i.test(availableFieldsSection);
   const useCaseTokens = extractSignalTokens(`${displayTitle} ${useCase}`);
   const matchedTokens = useCaseTokens.filter((token) =>
     preview.searchText.includes(token),
@@ -330,7 +334,7 @@ async function analyzeTemplate({
     ),
     buildCheck(
       "Indexing and setup",
-      indexed && Boolean(previewUrl) && /Form Fields/i.test(availableFieldsSection),
+      indexed && Boolean(previewUrl) && hasAvailableFields,
       {
         failDetail:
           `Template should be indexable and expose both a preview form and an Available Fields section. One or more of those setup signals is missing.${previewAttempt.error ? ` Preview fetch failed with ${previewAttempt.error.statusCode || "an unknown error"}.` : ""}`,
@@ -441,6 +445,22 @@ function extractSectionBetween(html, startMarker, endMarker) {
   return html.slice(startIndex, endIndex);
 }
 
+function extractAboutSection(html) {
+  const directMatch = html.match(
+    /About this template<\/strong>([\s\S]*?)<strong[^>]*>\s*Details\s*<\/strong>/i,
+  );
+
+  if (directMatch?.[1]) {
+    return directMatch[1];
+  }
+
+  return extractSectionBetween(
+    html,
+    'data-tab="overview"',
+    'data-tab="available-fields"',
+  );
+}
+
 function extractParagraphs(sectionHtml) {
   return [...sectionHtml.matchAll(/<p[^>]*>([\s\S]*?)<\/p>/gi)]
     .map((match) => cleanText(match[1]))
@@ -454,6 +474,67 @@ function extractFaqPairs(sectionHtml) {
       question: cleanText(match[1]),
     }))
     .filter((pair) => pair.question && pair.answer);
+}
+
+function extractJsonLdEntries(html) {
+  const entries = [];
+
+  for (const match of html.matchAll(
+    /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi,
+  )) {
+    const raw = cleanText(match[1]);
+
+    if (!raw) {
+      continue;
+    }
+
+    try {
+      entries.push(JSON.parse(raw));
+    } catch {
+      // Ignore malformed JSON-LD blocks.
+    }
+  }
+
+  return entries;
+}
+
+function extractFaqPairsFromJsonLd(entries) {
+  const items = flattenJsonLd(entries);
+  const faqPage = items.find((item) => item?.["@type"] === "FAQPage");
+  const questions = Array.isArray(faqPage?.mainEntity) ? faqPage.mainEntity : [];
+
+  return questions
+    .map((question) => ({
+      answer: cleanText(question?.acceptedAnswer?.text || ""),
+      question: cleanText(question?.name || ""),
+    }))
+    .filter((pair) => pair.question && pair.answer);
+}
+
+function extractFieldNamesFromJsonLd(entries) {
+  const items = flattenJsonLd(entries);
+  const creativeWork = items.find((item) => item?.["@type"] === "CreativeWork");
+  const properties = Array.isArray(creativeWork?.additionalProperty)
+    ? creativeWork.additionalProperty
+    : [];
+
+  return properties
+    .map((property) => cleanText(property?.value || property?.name || ""))
+    .filter(Boolean);
+}
+
+function flattenJsonLd(entries) {
+  return entries.flatMap((entry) => {
+    if (Array.isArray(entry)) {
+      return flattenJsonLd(entry);
+    }
+
+    if (Array.isArray(entry?.["@graph"])) {
+      return flattenJsonLd(entry["@graph"]);
+    }
+
+    return [entry];
+  });
 }
 
 function extractPreviewPath(html) {
