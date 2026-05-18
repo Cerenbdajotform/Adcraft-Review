@@ -11,14 +11,12 @@ const REVIEW_DECISIONS = new Set([
 ]);
 const CHECK_VALUES = new Set(["Pending", "Pass", "Fail"]);
 const DEFAULT_CHECKS = {
-  titleReview: "Pending",
-  h1EndsWithForm: "Pending",
-  faqReview: "Pending",
-  availableFieldsReview: "Pending",
-  formUseCaseReview: "Pending",
-  fieldCountReview: "Pending",
-  consentRuleReview: "Pending",
-  sensitiveFieldsReview: "Pending",
+  h1CorrectReview: "Pending",
+  metaDescriptionReview: "Pending",
+  faqCorrectReview: "Pending",
+  fieldRangeReview: "Pending",
+  indexedReview: "Pending",
+  templateSetupReview: "Pending",
 };
 const LOCAL_STATE_PATH = path.join(
   process.cwd(),
@@ -66,14 +64,22 @@ function normalizeCheckValue(value) {
 
 function normalizeChecks(checks) {
   return {
-    titleReview: normalizeCheckValue(checks?.titleReview),
-    h1EndsWithForm: normalizeCheckValue(checks?.h1EndsWithForm),
-    faqReview: normalizeCheckValue(checks?.faqReview),
-    availableFieldsReview: normalizeCheckValue(checks?.availableFieldsReview),
-    formUseCaseReview: normalizeCheckValue(checks?.formUseCaseReview),
-    fieldCountReview: normalizeCheckValue(checks?.fieldCountReview),
-    consentRuleReview: normalizeCheckValue(checks?.consentRuleReview),
-    sensitiveFieldsReview: normalizeCheckValue(checks?.sensitiveFieldsReview),
+    h1CorrectReview: normalizeCheckValue(
+      checks?.h1CorrectReview ?? checks?.h1EndsWithForm,
+    ),
+    metaDescriptionReview: normalizeCheckValue(
+      checks?.metaDescriptionReview,
+    ),
+    faqCorrectReview: normalizeCheckValue(
+      checks?.faqCorrectReview ?? checks?.faqReview,
+    ),
+    fieldRangeReview: normalizeCheckValue(
+      checks?.fieldRangeReview ?? checks?.fieldCountReview,
+    ),
+    indexedReview: normalizeCheckValue(checks?.indexedReview),
+    templateSetupReview: normalizeCheckValue(
+      checks?.templateSetupReview ?? checks?.formUseCaseReview,
+    ),
   };
 }
 
@@ -540,12 +546,19 @@ async function saveReview(itemId, reviewPatch) {
 
     const currentItem = state.items[itemIndex];
     const reviewDecision = normalizeReviewDecision(reviewPatch.reviewDecision);
+    const hasChecksPatch = reviewPatch.checks && typeof reviewPatch.checks === "object";
+    const hasPriorityPatch = Object.hasOwn(reviewPatch, "priority");
+    const hasReviewNotesPatch = Object.hasOwn(reviewPatch, "reviewNotes");
 
     state.items[itemIndex] = normalizeItem({
       ...currentItem,
-      priority: coerceText(reviewPatch.priority),
+      priority: hasPriorityPatch
+        ? coerceText(reviewPatch.priority)
+        : currentItem.priority,
       reviewDecision,
-      reviewNotes: coerceText(reviewPatch.reviewNotes),
+      reviewNotes: hasReviewNotesPatch
+        ? coerceText(reviewPatch.reviewNotes)
+        : currentItem.reviewNotes,
       reviewedAt:
         coerceText(reviewPatch.reviewedAt) || new Date().toISOString(),
       reviewer: coerceText(reviewPatch.reviewer),
@@ -553,10 +566,12 @@ async function saveReview(itemId, reviewPatch) {
         reviewPatch.reviewStatus,
         reviewDecision,
       ),
-      checks: {
-        ...currentItem.checks,
-        ...normalizeChecks(reviewPatch.checks || {}),
-      },
+      checks: hasChecksPatch
+        ? {
+            ...currentItem.checks,
+            ...normalizeChecks(reviewPatch.checks || {}),
+          }
+        : currentItem.checks,
     });
     state.updatedBy = coerceText(reviewPatch.reviewer);
 

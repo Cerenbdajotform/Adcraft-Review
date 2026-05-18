@@ -209,49 +209,28 @@
                     <section class="card review-card">
                       <div class="card-header">
                         <div>
-                          <p class="section-label">Checklist</p>
-                          <h3>Human review fields</h3>
+                          <p class="section-label">Review</p>
+                          <h3>Final decision</h3>
                         </div>
                         <button id="mark-reviewed" class="secondary-button" type="button">
                           Save Review
                         </button>
                       </div>
 
-                      <div class="review-grid" id="review-grid"></div>
-
-                      <div class="notes-grid">
-                        <label class="textarea-wrap">
-                          <span>Review notes</span>
-                          <textarea
-                            id="review-notes"
-                            rows="7"
-                            placeholder="Write what is wrong, what passed, and whether L2 is needed."
-                          ></textarea>
+                      <div class="review-meta-card review-meta-card--compact">
+                        <label>
+                          <span>Final Decision</span>
+                          <select id="review-decision">
+                            <option value="Pending">Pending</option>
+                            <option value="Pass">Pass</option>
+                            <option value="Needs Fix">Needs Fix</option>
+                            <option value="Escalate L2">Escalate L2</option>
+                          </select>
                         </label>
-
-                        <div class="review-meta-card">
-                          <label>
-                            <span>Reviewer</span>
-                            <input id="reviewer-name" type="text" placeholder="Reviewer name" />
-                          </label>
-                          <label>
-                            <span>Review decision</span>
-                            <select id="review-decision">
-                              <option value="Pending">Pending</option>
-                              <option value="Pass">Pass</option>
-                              <option value="Needs Fix">Needs Fix</option>
-                              <option value="Escalate L2">Escalate L2</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>Priority</span>
-                            <input id="review-priority" type="text" placeholder="High, Medium, Low" />
-                          </label>
-                          <div class="timestamp-block">
-                            <span>Last saved</span>
-                            <strong id="review-saved-at">Not saved yet</strong>
-                          </div>
-                        </div>
+                        <label>
+                          <span>Assignee</span>
+                          <input id="reviewer-name" type="text" placeholder="Assignee name" />
+                        </label>
                       </div>
                     </section>
                   </div>

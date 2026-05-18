@@ -8,52 +8,37 @@ const API_ENDPOINTS = {
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
 
-const CHECK_FIELDS = [
-  {
-    key: "titleReview",
-    label: "Title Review",
-    hint: "Title should match the prompt, avoid emoji, and use Form correctly.",
-  },
-  {
-    key: "h1EndsWithForm",
-    label: "H1 Ends With Form",
-    hint: "The H1 should end with the word Form and stay consistent with the title.",
-  },
-  {
-    key: "faqReview",
-    label: "FAQ Review",
-    hint: "FAQ should be relevant to the template use case and not generic filler.",
-  },
-  {
-    key: "availableFieldsReview",
-    label: "Available Fields",
-    hint: "Check whether the template page includes the Available Fields tab or section.",
-  },
-  {
-    key: "formUseCaseReview",
-    label: "Form-Use Case Field",
-    hint: "Form structure should match the use case and required operational fields.",
-  },
-  {
-    key: "fieldCountReview",
-    label: "Field Count Review",
-    hint: "Generated form should stay between 10 and 10 top-level fields per the prompt.",
-  },
-  {
-    key: "consentRuleReview",
-    label: "Consent Rule Review",
-    hint: "Consent should exist only when the prompt rules require it.",
-  },
-  {
-    key: "sensitiveFieldsReview",
-    label: "Sensitive Fields Review",
-    hint: "No prohibited IDs, payment data, or other sensitive information should be collected.",
-  },
-];
+const DEFAULT_CHECKS = {
+  h1CorrectReview: "Pending",
+  metaDescriptionReview: "Pending",
+  faqCorrectReview: "Pending",
+  fieldRangeReview: "Pending",
+  indexedReview: "Pending",
+  templateSetupReview: "Pending",
+};
 
-const DEFAULT_CHECKS = Object.fromEntries(
-  CHECK_FIELDS.map((field) => [field.key, "Pending"]),
-);
+function normalizeCheckValue(value) {
+  return ["Pending", "Pass", "Fail"].includes(value) ? value : "Pending";
+}
+
+function normalizeChecks(checks = {}) {
+  return {
+    h1CorrectReview: normalizeCheckValue(
+      checks.h1CorrectReview ?? checks.h1EndsWithForm,
+    ),
+    metaDescriptionReview: normalizeCheckValue(checks.metaDescriptionReview),
+    faqCorrectReview: normalizeCheckValue(
+      checks.faqCorrectReview ?? checks.faqReview,
+    ),
+    fieldRangeReview: normalizeCheckValue(
+      checks.fieldRangeReview ?? checks.fieldCountReview,
+    ),
+    indexedReview: normalizeCheckValue(checks.indexedReview),
+    templateSetupReview: normalizeCheckValue(
+      checks.templateSetupReview ?? checks.formUseCaseReview,
+    ),
+  };
+}
 
 const elements = {
   summaryGrid: document.getElementById("summary-grid"),
@@ -74,12 +59,8 @@ const elements = {
   openTemplate: document.getElementById("open-template"),
   openOriginalTemplate: document.getElementById("open-original-template"),
   openL2Ticket: document.getElementById("open-l2-ticket"),
-  reviewGrid: document.getElementById("review-grid"),
-  reviewNotes: document.getElementById("review-notes"),
   reviewerName: document.getElementById("reviewer-name"),
   reviewDecision: document.getElementById("review-decision"),
-  reviewPriority: document.getElementById("review-priority"),
-  reviewSavedAt: document.getElementById("review-saved-at"),
   markReviewed: document.getElementById("mark-reviewed"),
   upload: document.getElementById("dataset-upload"),
   uploadLabel: document.getElementById("upload-label"),
@@ -402,14 +383,13 @@ function renderQueue() {
       const activeClass = item.id === state.selectedId ? "active" : "";
       const statusClass =
         item.reviewStatus === "Reviewed" ? "status-reviewed" : "status-pending";
-      const availableFieldsValue = item.checks.availableFieldsReview || "Pending";
 
       return `
         <button class="queue-item ${activeClass}" data-select-id="${escapeHtml(item.id)}" type="button">
           <div class="queue-meta">
             <span class="meta-chip ${statusClass}">${escapeHtml(item.reviewStatus)}</span>
             <span class="meta-chip">${escapeHtml(item.generatedDate || "No date")}</span>
-            <span class="meta-chip">Available Fields: ${escapeHtml(availableFieldsValue)}</span>
+            <span class="meta-chip">${escapeHtml(item.reviewDecision || "Pending")}</span>
           </div>
           <div>
             <h3>${escapeHtml(item.title || "Untitled template")}</h3>
@@ -448,7 +428,7 @@ function renderDetail() {
     item.generatedDate,
     item.reviewStatus,
     item.reviewDecision,
-    item.priority || "No priority",
+    item.reviewer || "No assignee",
   ]
     .filter(Boolean)
     .map((value) => `<span class="meta-chip">${escapeHtml(value)}</span>`)
@@ -465,15 +445,8 @@ function renderDetail() {
   elements.templateFrame.src = item.templateUrl || "about:blank";
 
   renderFacts(item);
-  renderChecks(item);
-
-  elements.reviewNotes.value = item.reviewNotes || "";
   elements.reviewerName.value = item.reviewer || state.preferences.reviewerName || "";
   elements.reviewDecision.value = item.reviewDecision || "Pending";
-  elements.reviewPriority.value = item.priority || "";
-  elements.reviewSavedAt.textContent = item.reviewedAt
-    ? formatDateTime(item.reviewedAt)
-    : "Not saved yet";
 }
 
 function renderFacts(item) {
@@ -496,30 +469,6 @@ function renderFacts(item) {
           <dd>${escapeHtml(value || "—")}</dd>
         </div>
       `,
-    )
-    .join("");
-}
-
-function renderChecks(item) {
-  elements.reviewGrid.innerHTML = CHECK_FIELDS.map((field) => {
-    const currentValue = item.checks[field.key] || "Pending";
-    return `
-      <label class="review-field">
-        <h4>${escapeHtml(field.label)}</h4>
-        <p>${escapeHtml(field.hint)}</p>
-        <select data-check-key="${escapeHtml(field.key)}">
-          ${renderCheckOptions(currentValue)}
-        </select>
-      </label>
-    `;
-  }).join("");
-}
-
-function renderCheckOptions(selectedValue) {
-  return ["Pending", "Pass", "Fail"]
-    .map(
-      (value) =>
-        `<option value="${value}" ${value === selectedValue ? "selected" : ""}>${value}</option>`,
     )
     .join("");
 }
@@ -582,22 +531,13 @@ async function saveCurrentReview() {
 }
 
 function collectReviewPayload() {
-  const checks = {};
-
-  elements.reviewGrid.querySelectorAll("[data-check-key]").forEach((select) => {
-    checks[select.dataset.checkKey] = select.value;
-  });
-
   const reviewDecision = elements.reviewDecision.value;
   const reviewer = elements.reviewerName.value.trim();
 
   state.preferences.reviewerName = reviewer;
 
   return {
-    checks,
-    priority: elements.reviewPriority.value.trim(),
     reviewDecision,
-    reviewNotes: elements.reviewNotes.value.trim(),
     reviewedAt: new Date().toISOString(),
     reviewer,
     reviewStatus: reviewDecision === "Pending" ? "Pending" : "Reviewed",
@@ -697,6 +637,7 @@ function normalizeRow(row, index = 0) {
   const title =
     row["Original Template Title"] ||
     row["Template Title"] ||
+    row.Title ||
     row.title ||
     row.Name ||
     useCase ||
@@ -705,34 +646,32 @@ function normalizeRow(row, index = 0) {
   const createdAt = row["Created At"] || row.createdAt || "";
 
   return prepareItem({
-    campaignName: row["Campaign Name"] || row.campaignName || campaignId,
-    checks: {
-      titleReview: row["Title Review"] || row.titleReview || "Pending",
-      h1EndsWithForm:
-        row["H1 Ends With Form"] || row.h1EndsWithForm || "Pending",
-      faqReview: row["FAQ Review"] || row.faqReview || "Pending",
-      availableFieldsReview:
-        row["Available Fields Review"] ||
-        row.availableFieldsReview ||
-        "Pending",
-      formUseCaseReview:
+    campaignName: row["Campaign Name"] || row.Campaign || row.campaignName || campaignId,
+    checks: normalizeChecks({
+      h1CorrectReview:
+        row["H1 Correct"] || row.h1CorrectReview || row["H1 Ends With Form"] || row.h1EndsWithForm,
+      metaDescriptionReview:
+        row["Meta Description Meaningful"] ||
+        row["Meta Description Review"] ||
+        row.metaDescriptionReview,
+      faqCorrectReview:
+        row["FAQ Correct"] || row.faqCorrectReview || row["FAQ Review"] || row.faqReview,
+      fieldRangeReview:
+        row["Form Fields 8 to 12"] ||
+        row["Field Range Review"] ||
+        row.fieldRangeReview ||
+        row["Field Count Review"] ||
+        row.fieldCountReview,
+      indexedReview:
+        row["Form Is Indexed"] || row["Indexed Review"] || row.indexedReview,
+      templateSetupReview:
+        row["Form Template Correctly Set Up"] ||
+        row["Template Setup Review"] ||
+        row.templateSetupReview ||
         row["Form-Use Case Field"] ||
         row["Form-Use Case Review"] ||
-        row.formUseCaseReview ||
-        "Pending",
-      fieldCountReview:
-        row["Field Count Review"] || row.fieldCountReview || "Pending",
-      consentRuleReview:
-        row["Consent Rule Review"] ||
-        row["Consent Rule"] ||
-        row.consentRuleReview ||
-        "Pending",
-      sensitiveFieldsReview:
-        row["Sensitive Fields Review"] ||
-        row["Sensitive Fields"] ||
-        row.sensitiveFieldsReview ||
-        "Pending",
-    },
+        row.formUseCaseReview,
+    }),
     displayCampaign:
       row["Display Campaign"] || row.displayCampaign || campaignId,
     formId: row["Form ID"] || row.formId || "",
@@ -750,11 +689,12 @@ function normalizeRow(row, index = 0) {
     originalTemplateUrl:
       row["Original Template URL"] || row.originalTemplateUrl || "",
     priority: row.Priority || row.priority || "",
-    reviewDecision: row["Review Decision"] || row.reviewDecision || "Pending",
+    reviewDecision:
+      row["Final Decision"] || row["Review Decision"] || row.reviewDecision || "Pending",
     reviewNotes: row["Review Notes"] || row.reviewNotes || "",
     reviewStatus: row["Review Status"] || row.reviewStatus || "Pending",
     reviewedAt: row["Reviewed At"] || row.reviewedAt || "",
-    reviewer: row.Reviewer || row.reviewer || "",
+    reviewer: row.Assignee || row.Reviewer || row.reviewer || "",
     sourceForm: row["Source Form"] || row.sourceForm || "",
     templateId: row["Template ID"] || row.templateId || "",
     templateUrl,
@@ -788,10 +728,7 @@ function prepareItem(item) {
     reviewer: String(item.reviewer || "").trim(),
     reviewedAt: String(item.reviewedAt || "").trim(),
     reviewNotes: String(item.reviewNotes || "").trim(),
-    checks: {
-      ...DEFAULT_CHECKS,
-      ...(item.checks || {}),
-    },
+    checks: normalizeChecks(item.checks || {}),
   };
 }
 
@@ -864,23 +801,14 @@ function applyFilters(items, filters) {
 
 function exportReviews() {
   const rows = state.allItems.map((item) => ({
-    title: item.title,
-    templateUrl: item.templateUrl,
-    generatedDate: item.generatedDate,
-    campaignName: item.campaignName,
-    reviewStatus: item.reviewStatus,
-    reviewDecision: item.reviewDecision,
-    reviewer: item.reviewer,
-    reviewedAt: item.reviewedAt,
-    titleReview: item.checks.titleReview,
-    h1EndsWithForm: item.checks.h1EndsWithForm,
-    faqReview: item.checks.faqReview,
-    availableFieldsReview: item.checks.availableFieldsReview,
-    formUseCaseReview: item.checks.formUseCaseReview,
-    fieldCountReview: item.checks.fieldCountReview,
-    consentRuleReview: item.checks.consentRuleReview,
-    sensitiveFieldsReview: item.checks.sensitiveFieldsReview,
-    reviewNotes: item.reviewNotes,
+    Title: item.title,
+    "Template URL": item.templateUrl,
+    "Generated Date": item.generatedDate,
+    Campaign: item.campaignName,
+    "Review Status": item.reviewStatus,
+    "Final Decision": item.reviewDecision,
+    Assignee: item.reviewer,
+    "Reviewed At": item.reviewedAt,
   }));
 
   const headers = Object.keys(rows[0] || {});

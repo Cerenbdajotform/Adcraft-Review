@@ -1,22 +1,24 @@
 :root {
-  --app-bg: #f3f5ff;
-  --sidebar-bg: #eef1ff;
+  --app-bg: #edf6ff;
+  --sidebar-bg: #e4f0ff;
   --surface: #ffffff;
-  --surface-soft: #f8faff;
-  --surface-muted: #f4f6ff;
-  --ink: #18245c;
-  --ink-soft: #6977a7;
-  --line: #dbe2fb;
-  --line-strong: #cbd5f7;
-  --accent: #0f67ff;
-  --accent-strong: #0d57d1;
-  --accent-soft: #ecf3ff;
-  --success-bg: #e8f8f0;
-  --success-ink: #157758;
-  --pending-bg: #fff4df;
-  --pending-ink: #926105;
+  --surface-soft: #f4f9ff;
+  --surface-muted: #ecf4ff;
+  --ink: #12305f;
+  --ink-soft: #5f78a3;
+  --line: #cfdef2;
+  --line-strong: #bdd2ed;
+  --accent: #1270ff;
+  --accent-strong: #0b59dd;
+  --accent-soft: #e8f2ff;
+  --brand-orange: #ff8a1f;
+  --brand-orange-soft: #fff3e6;
+  --success-bg: #e7f7ef;
+  --success-ink: #16694f;
+  --pending-bg: #fff3df;
+  --pending-ink: #8f5d06;
   --danger: #cf4d4d;
-  --shadow: 0 14px 34px rgba(78, 91, 145, 0.08);
+  --shadow: 0 16px 36px rgba(34, 90, 166, 0.08);
   --radius-xl: 26px;
   --radius-lg: 22px;
   --radius-md: 16px;
@@ -31,7 +33,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background: linear-gradient(180deg, #f7f8ff 0%, #eff2ff 100%);
+  background: linear-gradient(180deg, #f4f9ff 0%, #e8f2ff 100%);
   color: var(--ink);
   font-family: "Avenir Next", "Segoe UI", sans-serif;
 }
@@ -112,6 +114,7 @@ button:hover,
   align-items: center;
   background: var(--surface);
   border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 rgba(24, 38, 95, 0.03);
   display: flex;
   padding: 0 28px;
 }
@@ -156,7 +159,7 @@ button:hover,
 }
 
 .topbar-product {
-  color: var(--ink);
+  color: var(--accent-strong);
   font-size: 15px;
   font-weight: 700;
 }
@@ -183,7 +186,7 @@ button:hover,
 .sidebar-link {
   background: transparent;
   border: 0;
-  color: #4b588b;
+  color: #476a9a;
   cursor: default;
   display: grid;
   gap: 14px;
@@ -197,7 +200,8 @@ button:hover,
 
 .sidebar-link.active,
 .sidebar-link:hover {
-  background: rgba(255, 255, 255, 0.72);
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(18, 112, 255, 0.1);
   color: var(--ink);
 }
 
@@ -268,7 +272,7 @@ button:hover,
 }
 
 .section-label {
-  color: #f07a00;
+  color: var(--brand-orange);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -339,8 +343,8 @@ button:hover,
 }
 
 .sync-card[data-mode="shared"] {
-  background: #f7fbff;
-  border-color: #cee0ff;
+  background: #f5faff;
+  border-color: #c8ddff;
 }
 
 .sync-card[data-mode="shared"] strong {
@@ -349,8 +353,8 @@ button:hover,
 
 .sync-card[data-mode="local"],
 .sync-card[data-mode="loading"] {
-  background: #fffaf0;
-  border-color: #f1ddac;
+  background: var(--brand-orange-soft);
+  border-color: #ffd6ad;
 }
 
 .sync-card[data-mode="local"] strong,
@@ -368,7 +372,7 @@ button:hover,
 }
 
 .date-range-label {
-  color: #f07a00;
+  color: var(--brand-orange);
   font-size: 0.72rem;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -430,7 +434,19 @@ button:hover,
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: none;
+  position: relative;
   padding: 1rem 1.05rem;
+}
+
+.summary-card::before {
+  background: linear-gradient(90deg, var(--accent) 0%, #6fa7ff 100%);
+  border-radius: 999px;
+  content: "";
+  display: block;
+  height: 4px;
+  inset: 0 auto auto 0;
+  position: absolute;
+  width: 100%;
 }
 
 .summary-card strong {
@@ -485,9 +501,9 @@ button:hover,
 }
 
 .count-pill {
-  background: var(--accent-soft);
+  background: var(--brand-orange-soft);
   border-radius: 999px;
-  color: #4b7fe6;
+  color: var(--brand-orange);
   font-size: 0.72rem;
   font-weight: 800;
   padding: 0.3rem 0.65rem;
@@ -515,8 +531,8 @@ textarea {
 input:focus,
 select:focus,
 textarea:focus {
-  border-color: #9cbcff;
-  box-shadow: 0 0 0 3px rgba(15, 103, 255, 0.1);
+  border-color: #8eb8ff;
+  box-shadow: 0 0 0 3px rgba(18, 112, 255, 0.12);
 }
 
 textarea {
@@ -548,8 +564,9 @@ textarea {
 }
 
 .queue-item.active {
-  border-color: #9fbcff;
-  box-shadow: 0 0 0 3px rgba(15, 103, 255, 0.08);
+  background: #f3f8ff;
+  border-color: #98beff;
+  box-shadow: 0 0 0 3px rgba(18, 112, 255, 0.1);
 }
 
 .queue-item h3 {
@@ -572,15 +589,9 @@ textarea {
   gap: 0.45rem;
 }
 
-.review-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
 .meta-chip {
-  background: #f2f5ff;
-  border: 1px solid #e1e8ff;
+  background: #f3f7fd;
+  border: 1px solid #dce6f7;
   border-radius: 999px;
   color: var(--ink-soft);
   font-size: 0.68rem;
@@ -633,7 +644,7 @@ textarea {
 
 .preview-card iframe {
   background: #fff;
-  border: 1px solid var(--line);
+  border: 1px solid #d5e0f4;
   border-radius: 18px;
   height: 620px;
   margin-top: 14px;
@@ -654,7 +665,7 @@ textarea {
 
 .facts-grid div {
   background: var(--surface-soft);
-  border: 1px solid var(--line);
+  border: 1px solid #dbe5f5;
   border-radius: 14px;
   padding: 0.85rem;
 }
@@ -678,52 +689,17 @@ textarea {
   gap: 1rem;
 }
 
-.review-field {
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
-  border-radius: 16px;
-  display: grid;
-  gap: 0.5rem;
-  padding: 0.95rem;
-}
-
-.review-field h4 {
-  font-size: 0.92rem;
-  margin: 0;
-}
-
-.review-field p {
-  color: var(--ink-soft);
-  font-size: 0.78rem;
-  line-height: 1.5;
-  margin: 0;
-}
-
-.notes-grid {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.8fr);
-}
-
 .review-meta-card {
-  background: var(--surface-soft);
-  border: 1px solid var(--line);
+  background: #f8fbff;
+  border: 1px solid #dce6f5;
   border-radius: 18px;
   display: grid;
   gap: 1rem;
   padding: 1rem;
 }
 
-.timestamp-block {
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  padding: 0.8rem;
-}
-
-.timestamp-block span {
-  display: block;
-  margin-bottom: 0.35rem;
+.review-meta-card--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .empty-state {
@@ -762,16 +738,11 @@ textarea {
 @media (max-width: 1280px) {
   .hero,
   .dashboard-layout,
-  .detail-grid,
-  .notes-grid {
+  .detail-grid {
     grid-template-columns: 1fr;
   }
 
   .summary-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .review-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -834,10 +805,9 @@ textarea {
 
   .hero-actions,
   .summary-grid,
-  .review-grid,
   .facts-grid,
   .date-range-controls,
-  .notes-grid {
+  .review-meta-card--compact {
     grid-template-columns: 1fr;
   }
 
