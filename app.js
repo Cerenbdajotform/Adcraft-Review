@@ -9,7 +9,7 @@ const API_ENDPOINTS = {
 const SHARED_DASHBOARD_ORIGIN = "https://adcraft-review-ceren.vercel.app";
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
-const L2_TICKET_ASSIGNEE = "Template Team";
+const L2_TICKET_ASSIGNEE = "Ceren Bozada";
 const L2_TICKET_TYPE = "Feedback";
 const L2_TICKET_PRIORITY = "Low";
 const L2_TICKET_FAIL_TITLE_PREFIX =
