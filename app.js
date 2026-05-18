@@ -9,6 +9,9 @@ const API_ENDPOINTS = {
 const SHARED_DASHBOARD_ORIGIN = "https://adcraft-review-ceren.vercel.app";
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
+const L2_TICKET_ASSIGNEE = "Ceren Bozada";
+const L2_TICKET_FAIL_TITLE_PREFIX =
+  "Template Adcraft Form AI Review suggestion:";
 const DEFAULT_ASSIGNEE = "Ceren";
 const ASSIGNEE_OPTIONS = ["Ceren", "Batuhan", "Buğçe", "Mehmet"];
 
@@ -173,6 +176,7 @@ function bindEvents() {
 
   elements.nextTemplate.addEventListener("click", goToNextTemplate);
   elements.markReviewed.addEventListener("click", saveCurrentReview);
+  elements.openL2Ticket.addEventListener("click", handleOpenL2Ticket);
   elements.refreshAiReview.addEventListener("click", () => {
     const item = state.allItems.find((entry) => entry.id === state.selectedId);
 
@@ -485,7 +489,12 @@ function renderDetail() {
     "aria-disabled",
     !(item.originalTemplateUrl || item.templateUrl),
   );
-  elements.openL2Ticket.href = L2_TICKET_URL;
+  const l2Draft = buildL2TicketDraft(item);
+  elements.openL2Ticket.href = buildL2TicketUrl(l2Draft);
+  elements.openL2Ticket.dataset.mode = l2Draft ? "prefilled" : "plain";
+  elements.openL2Ticket.textContent = l2Draft
+    ? "Open L2 Ticket Draft"
+    : "Open L2 Ticket";
   elements.templateFrame.src = item.templateUrl || "about:blank";
 
   renderFacts(item);
@@ -501,6 +510,41 @@ function renderDetail() {
     state.reviewActionBusy || getNextFilteredItemId(item.id) === null;
 
   ensureAiReview(item);
+}
+
+async function handleOpenL2Ticket(event) {
+  const item = state.allItems.find((entry) => entry.id === state.selectedId);
+
+  if (!item) {
+    return;
+  }
+
+  const l2Draft = buildL2TicketDraft(item);
+
+  if (!l2Draft) {
+    return;
+  }
+
+  event.preventDefault();
+  elements.reviewDecision.value = "Escalate L2";
+
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(l2Draft.clipboardText);
+      setSyncStatus(
+        state.sync.canWrite ? "shared" : "local",
+        `L2 draft copied for ${L2_TICKET_ASSIGNEE}. Opened the ticket page with the fail title prefilled.`,
+      );
+    }
+  } catch {
+    setSyncStatus(
+      state.sync.canWrite ? "shared" : "local",
+      "Opened the L2 ticket page. Clipboard copy was blocked, so paste the fail reason manually if needed.",
+    );
+  }
+
+  window.open(buildL2TicketUrl(l2Draft), "_blank", "noopener,noreferrer");
+  render();
 }
 
 function renderFacts(item) {
@@ -691,6 +735,63 @@ function renderSavedReviewRecord(item) {
   };
 
   elements.savedReviewRecord.textContent = JSON.stringify(savedRecord, null, 2);
+}
+
+function buildL2TicketDraft(item) {
+  const entry = state.aiReview.cache[item.id];
+  const data = entry?.status === "ready" ? entry.data : null;
+
+  if (!data) {
+    return null;
+  }
+
+  const failedChecks = Array.isArray(data.checks)
+    ? data.checks.filter((check) => check.status === "fail")
+    : [];
+
+  if (!failedChecks.length) {
+    return null;
+  }
+
+  const failReasonLines = failedChecks.map(
+    (check) => `- ${check.label}: ${check.detail}`,
+  );
+  const title = `${L2_TICKET_FAIL_TITLE_PREFIX} ${item.title || "Template Review"} - Template Review: Fail`;
+  const description = [
+    `Template review reason:`,
+    ...failReasonLines,
+    ``,
+    `AI suggested decision: ${data.suggestedDecision || "Fail"}`,
+    `Suggested assignee: ${L2_TICKET_ASSIGNEE}`,
+    ``,
+    `Form template link:`,
+    item.templateUrl || "—",
+  ].join("\n");
+
+  return {
+    description,
+    failedChecks,
+    pageUrl: item.templateUrl || "",
+    title,
+    clipboardText: [
+      `Ticket Title: ${title}`,
+      `Assignee: ${L2_TICKET_ASSIGNEE}`,
+      ``,
+      description,
+    ].join("\n"),
+  };
+}
+
+function buildL2TicketUrl(l2Draft) {
+  if (!l2Draft) {
+    return L2_TICKET_URL;
+  }
+
+  const params = new URLSearchParams({
+    title: l2Draft.title,
+  });
+
+  return `${L2_TICKET_URL}?${params.toString()}`;
 }
 
 async function persistCurrentReview() {
