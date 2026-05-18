@@ -742,32 +742,34 @@ function renderSavedReviewRecord(item) {
 function buildL2TicketDraft(item) {
   const entry = state.aiReview.cache[item.id];
   const data = entry?.status === "ready" ? entry.data : null;
-
-  if (!data) {
-    return null;
-  }
+  const currentDecision =
+    item.id === state.selectedId
+      ? elements.reviewDecision.value || item.reviewDecision
+      : item.reviewDecision;
 
   const failedChecks = Array.isArray(data.checks)
     ? data.checks.filter((check) => check.status === "fail")
     : [];
+  const isManualEscalation = currentDecision === "Escalate L2";
 
-  if (!failedChecks.length) {
+  if (!failedChecks.length && !isManualEscalation) {
     return null;
   }
 
-  const failReasonLines = failedChecks.map(
-    (check) => `- ${check.label}: ${check.detail}`,
-  );
+  const failReasonLines = failedChecks.length
+    ? failedChecks.map((check) => `- ${check.label}: ${check.detail}`)
+    : [
+        "- Final decision was manually set to Escalate L2 by the reviewer.",
+        ...(data?.summary ? [`- AI review summary: ${data.summary}`] : []),
+      ];
   const title = `${L2_TICKET_FAIL_TITLE_PREFIX} ${item.title || "Template Review"} - Template Review: Fail`;
   const description = [
     `Template review reason:`,
     ...failReasonLines,
-    ``,
-    `AI suggested decision: ${data.suggestedDecision || "Fail"}`,
+    `AI suggested decision: ${data?.suggestedDecision || "Needs Fix"}`,
     `Suggested assignee: ${L2_TICKET_ASSIGNEE}`,
     `Suggested type: ${L2_TICKET_TYPE}`,
     `Suggested priority: ${L2_TICKET_PRIORITY}`,
-    ``,
     `Form template link:`,
     item.templateUrl || "—",
   ].join("\n");
@@ -782,7 +784,6 @@ function buildL2TicketDraft(item) {
       `Assignee: ${L2_TICKET_ASSIGNEE}`,
       `Type: ${L2_TICKET_TYPE}`,
       `Priority: ${L2_TICKET_PRIORITY}`,
-      ``,
       description,
     ].join("\n"),
   };
