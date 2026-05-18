@@ -58,8 +58,12 @@ module.exports = async function handler(req, res) {
 
   try {
     const requestUrl = new URL(req.url, "https://adcraft-review.local");
+    const formId = cleanText(requestUrl.searchParams.get("formId") || "");
     const templateUrl = normalizeTemplateUrl(
       requestUrl.searchParams.get("templateUrl") || "",
+    );
+    const templateId = cleanText(
+      requestUrl.searchParams.get("templateId") || "",
     );
     const expectedTitle = cleanText(
       requestUrl.searchParams.get("title") || "",
@@ -74,6 +78,8 @@ module.exports = async function handler(req, res) {
 
     const payload = await analyzeTemplate({
       expectedTitle,
+      formId,
+      templateId,
       templateUrl,
       useCase,
     });
@@ -90,8 +96,14 @@ function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-async function analyzeTemplate({ templateUrl, expectedTitle, useCase }) {
-  const templateHtml = await fetchText(templateUrl);
+async function analyzeTemplate({
+  templateUrl,
+  expectedTitle,
+  useCase,
+  templateId,
+  formId,
+}) {
+  const templateHtml = await fetchText(templateUrl, "Template");
   const pageTitle = extractPageTitle(templateHtml);
   const displayTitle = stripTemplateSuffix(pageTitle);
   const lang = extractLang(templateHtml) || "en";
@@ -116,8 +128,15 @@ async function analyzeTemplate({ templateUrl, expectedTitle, useCase }) {
   const aboutLength = aboutParagraphs.join(" ").length;
   const faqPairs = extractFaqPairs(faqSection);
   const previewPath = extractPreviewPath(templateHtml);
-  const previewUrl = previewPath ? new URL(previewPath, templateUrl).href : "";
-  const previewHtml = previewUrl ? await fetchText(previewUrl) : "";
+  const previewCandidates = buildPreviewCandidates({
+    formId,
+    previewPath,
+    templateId,
+    templateUrl,
+  });
+  const previewAttempt = await loadPreviewHtml(previewCandidates);
+  const previewUrl = previewAttempt.url;
+  const previewHtml = previewAttempt.html;
   const preview = parsePreview(previewHtml);
 
   const englishPage = /^en\b/i.test(lang);
@@ -314,7 +333,7 @@ async function analyzeTemplate({ templateUrl, expectedTitle, useCase }) {
       indexed && Boolean(previewUrl) && /Form Fields/i.test(availableFieldsSection),
       {
         failDetail:
-          "Template should be indexable and expose both a preview form and an Available Fields section. One or more of those setup signals is missing.",
+          `Template should be indexable and expose both a preview form and an Available Fields section. One or more of those setup signals is missing.${previewAttempt.error ? ` Preview fetch failed with ${previewAttempt.error.statusCode || "an unknown error"}.` : ""}`,
         passDetail:
           "Template is indexable and exposes both a preview form and an Available Fields section.",
       },
@@ -345,17 +364,18 @@ async function analyzeTemplate({ templateUrl, expectedTitle, useCase }) {
       pageTitle: displayTitle,
       previewUrl,
       radioGroupCount: preview.radioGroupCount,
+      previewFetchError: previewAttempt.error?.message || "",
     },
     summary,
     suggestedDecision,
   };
 }
 
-async function fetchText(url) {
+async function fetchText(url, label = "Template") {
   const response = await fetch(url, { headers: FETCH_HEADERS });
 
   if (!response.ok) {
-    const error = new Error(`Template request failed with ${response.status}.`);
+    const error = new Error(`${label} request failed with ${response.status}.`);
     error.statusCode = response.status;
     throw error;
   }
@@ -440,9 +460,53 @@ function extractPreviewPath(html) {
   return cleanText(
     extractFirstMatch(
       html,
-      /\/form-templates\/preview\/[^"' ]+?(?:disableSmartEmbed=1)?/i,
+      /\/form-templates\/preview\/[^"' ]+/i,
     ),
   );
+}
+
+function buildPreviewCandidates({ templateUrl, previewPath, templateId, formId }) {
+  const candidates = [];
+
+  if (previewPath) {
+    try {
+      candidates.push(new URL(previewPath, templateUrl).href);
+    } catch {
+      // Ignore malformed preview URLs from page HTML and use ID fallbacks below.
+    }
+  }
+
+  const previewId = formId || templateId;
+
+  if (previewId) {
+    candidates.push(
+      `https://www.jotform.com/form-templates/preview/${previewId}/classic&nofs&disableSmartEmbed=1`,
+    );
+  }
+
+  return uniqueValues(candidates.filter(Boolean));
+}
+
+async function loadPreviewHtml(previewCandidates) {
+  let lastError = null;
+
+  for (const previewUrl of previewCandidates) {
+    try {
+      return {
+        error: null,
+        html: await fetchText(previewUrl, "Preview"),
+        url: previewUrl,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  return {
+    error: lastError,
+    html: "",
+    url: "",
+  };
 }
 
 function parsePreview(previewHtml) {

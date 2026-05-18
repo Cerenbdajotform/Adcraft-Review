@@ -639,6 +639,8 @@ async function loadAiReview(item, { force = false } = {}) {
 
   try {
     const params = new URLSearchParams({
+      formId: item.formId || "",
+      templateId: item.templateId || "",
       templateUrl: item.templateUrl,
       title: item.title || "",
       useCase: item.useCase || item.keyword || "",
