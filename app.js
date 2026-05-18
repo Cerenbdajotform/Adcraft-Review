@@ -9,7 +9,9 @@ const API_ENDPOINTS = {
 const SHARED_DASHBOARD_ORIGIN = "https://adcraft-review-ceren.vercel.app";
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
-const L2_TICKET_ASSIGNEE = "Ceren Bozada";
+const L2_TICKET_ASSIGNEE = "Template Team";
+const L2_TICKET_TYPE = "Feedback";
+const L2_TICKET_PRIORITY = "Low";
 const L2_TICKET_FAIL_TITLE_PREFIX =
   "Template Adcraft Form AI Review suggestion:";
 const DEFAULT_ASSIGNEE = "Ceren";
@@ -763,6 +765,8 @@ function buildL2TicketDraft(item) {
     ``,
     `AI suggested decision: ${data.suggestedDecision || "Fail"}`,
     `Suggested assignee: ${L2_TICKET_ASSIGNEE}`,
+    `Suggested type: ${L2_TICKET_TYPE}`,
+    `Suggested priority: ${L2_TICKET_PRIORITY}`,
     ``,
     `Form template link:`,
     item.templateUrl || "—",
@@ -776,6 +780,8 @@ function buildL2TicketDraft(item) {
     clipboardText: [
       `Ticket Title: ${title}`,
       `Assignee: ${L2_TICKET_ASSIGNEE}`,
+      `Type: ${L2_TICKET_TYPE}`,
+      `Priority: ${L2_TICKET_PRIORITY}`,
       ``,
       description,
     ].join("\n"),
