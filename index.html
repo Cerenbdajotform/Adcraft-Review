@@ -195,43 +195,65 @@
                         <iframe id="template-frame" title="Template preview"></iframe>
                       </section>
 
-                      <section class="card review-card">
-                        <div class="card-header">
-                          <div>
-                            <p class="section-label">Review</p>
-                            <h3>Final decision</h3>
+                      <div class="detail-side-column">
+                        <section class="card review-card">
+                          <div class="card-header">
+                            <div>
+                              <p class="section-label">Review</p>
+                              <h3>Final decision</h3>
+                            </div>
+                            <div class="review-actions">
+                              <button id="next-template" class="ghost-button" type="button">
+                                Next Template
+                              </button>
+                              <button id="mark-reviewed" class="secondary-button" type="button">
+                                Save Review
+                              </button>
+                            </div>
                           </div>
-                          <div class="review-actions">
-                            <button id="next-template" class="ghost-button" type="button">
-                              Next Template
-                            </button>
-                            <button id="mark-reviewed" class="secondary-button" type="button">
-                              Save Review
-                            </button>
-                          </div>
-                        </div>
 
-                        <div class="review-meta-card review-meta-card--compact">
-                          <label>
-                            <span>Final Decision</span>
-                            <select id="review-decision">
-                              <option value="Pending">Pending</option>
-                              <option value="Pass">Pass</option>
-                              <option value="Needs Fix">Needs Fix</option>
-                              <option value="Escalate L2">Escalate L2</option>
-                            </select>
-                          </label>
-                          <label>
-                            <span>Assignee</span>
-                            <select id="reviewer-name">
-                              <option value="Ceren">Ceren</option>
-                              <option value="Batuhan">Batuhan</option>
-                              <option value="Buğçe">Buğçe</option>
-                              <option value="Mehmet">Mehmet</option>
-                            </select>
-                          </label>
-                        </div>
-                      </section>
+                          <div class="review-meta-card review-meta-card--compact">
+                            <label>
+                              <span>Final Decision</span>
+                              <select id="review-decision">
+                                <option value="Pending">Pending</option>
+                                <option value="Pass">Pass</option>
+                                <option value="Needs Fix">Needs Fix</option>
+                                <option value="Escalate L2">Escalate L2</option>
+                              </select>
+                            </label>
+                            <label>
+                              <span>Assignee</span>
+                              <select id="reviewer-name">
+                                <option value="Ceren">Ceren</option>
+                                <option value="Batuhan">Batuhan</option>
+                                <option value="Buğçe">Buğçe</option>
+                                <option value="Mehmet">Mehmet</option>
+                              </select>
+                            </label>
+                          </div>
+                        </section>
+
+                        <section class="card ai-review-card">
+                          <div class="card-header">
+                            <div>
+                              <p class="section-label">AI Review</p>
+                              <h3>AI Review Summary</h3>
+                            </div>
+                            <button id="refresh-ai-review" class="ghost-button ghost-button--small" type="button">
+                              Refresh AI Review
+                            </button>
+                          </div>
+                          <div class="textarea-wrap ai-summary-wrap">
+                            <textarea
+                              id="ai-review-summary"
+                              readonly
+                              placeholder="AI review summary will appear here."
+                            ></textarea>
+                            <p id="ai-review-summary-meta" class="field-help-text"></p>
+                          </div>
+                        </section>
+                      </div>
                     </div>
 
                     <section class="card info-card">
@@ -242,6 +264,19 @@
                         </div>
                       </div>
                       <dl id="template-facts" class="facts-grid"></dl>
+                    </section>
+
+                    <section class="card saved-review-card">
+                      <div class="card-header">
+                        <div>
+                          <p class="section-label">Saved Review</p>
+                          <h3>Stored review record</h3>
+                        </div>
+                        <span class="hint-text">
+                          This mirrors the current row structure in the dashboard.
+                        </span>
+                      </div>
+                      <pre id="saved-review-record" class="saved-review-record"></pre>
                     </section>
                   </div>
                 </section>

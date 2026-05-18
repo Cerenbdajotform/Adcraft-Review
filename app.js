@@ -4,7 +4,9 @@ const API_ENDPOINTS = {
   data: "/api/data",
   dataset: "/api/dataset",
   reviews: "/api/reviews",
+  aiReview: "/api/ai-review",
 };
+const SHARED_DASHBOARD_ORIGIN = "https://adcraft-review-ceren.vercel.app";
 const L2_TICKET_URL =
   "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
 const DEFAULT_ASSIGNEE = "Ceren";
@@ -65,6 +67,10 @@ const elements = {
   reviewerName: document.getElementById("reviewer-name"),
   reviewDecision: document.getElementById("review-decision"),
   markReviewed: document.getElementById("mark-reviewed"),
+  refreshAiReview: document.getElementById("refresh-ai-review"),
+  aiReviewSummary: document.getElementById("ai-review-summary"),
+  aiReviewSummaryMeta: document.getElementById("ai-review-summary-meta"),
+  savedReviewRecord: document.getElementById("saved-review-record"),
   upload: document.getElementById("dataset-upload"),
   uploadLabel: document.getElementById("upload-label"),
   exportReviews: document.getElementById("export-reviews"),
@@ -102,6 +108,10 @@ const state = {
   preferences: {
     reviewerName: DEFAULT_ASSIGNEE,
   },
+  aiReview: {
+    cache: {},
+  },
+  reviewActionBusy: false,
 };
 
 async function boot() {
@@ -163,6 +173,13 @@ function bindEvents() {
 
   elements.nextTemplate.addEventListener("click", goToNextTemplate);
   elements.markReviewed.addEventListener("click", saveCurrentReview);
+  elements.refreshAiReview.addEventListener("click", () => {
+    const item = state.allItems.find((entry) => entry.id === state.selectedId);
+
+    if (!item) return;
+
+    loadAiReview(item, { force: true });
+  });
   elements.exportReviews.addEventListener("click", exportReviews);
   elements.resetLocal.addEventListener("click", handleResetAction);
   elements.upload.addEventListener("change", handleUpload);
@@ -437,7 +454,11 @@ function renderDetail() {
   if (!item) {
     elements.emptyState.classList.remove("hidden");
     elements.detailView.classList.add("hidden");
+    elements.aiReviewSummary.value = "";
+    elements.aiReviewSummaryMeta.textContent = "";
+    elements.refreshAiReview.disabled = true;
     elements.nextTemplate.disabled = true;
+    elements.savedReviewRecord.textContent = "";
     return;
   }
 
@@ -468,11 +489,18 @@ function renderDetail() {
   elements.templateFrame.src = item.templateUrl || "about:blank";
 
   renderFacts(item);
+  renderAiReview(item);
+  renderSavedReviewRecord(item);
   syncAssigneeOptions(
     item.reviewer || state.preferences.reviewerName || DEFAULT_ASSIGNEE,
   );
   elements.reviewDecision.value = item.reviewDecision || "Pending";
-  elements.nextTemplate.disabled = getNextFilteredItemId(item.id) === null;
+  elements.markReviewed.disabled = state.reviewActionBusy;
+  elements.refreshAiReview.disabled = !item.templateUrl;
+  elements.nextTemplate.disabled =
+    state.reviewActionBusy || getNextFilteredItemId(item.id) === null;
+
+  ensureAiReview(item);
 }
 
 function renderFacts(item) {
@@ -499,10 +527,174 @@ function renderFacts(item) {
     .join("");
 }
 
-async function saveCurrentReview() {
+function renderAiReview(item) {
+  const entry = state.aiReview.cache[item.id];
+
+  if (!item.templateUrl) {
+    elements.aiReviewSummary.value =
+      "No template URL available.\n\nThe dashboard can only generate an AI review suggestion for rows that include a live template URL.";
+    elements.aiReviewSummaryMeta.textContent = "AI review unavailable";
+    return;
+  }
+
+  if (!entry || entry.status === "idle") {
+    elements.aiReviewSummary.value =
+      "AI review is ready to run.\n\nSelect this template on the deployed dashboard or press Refresh AI Review to analyze its title, copy, FAQ, fields, and prompt alignment.";
+    elements.aiReviewSummaryMeta.textContent = "Ready to analyze";
+    return;
+  }
+
+  if (entry.status === "loading") {
+    elements.aiReviewSummary.value =
+      "Analyzing template...\n\nReviewing the live template page and embedded form against the generation rules.";
+    elements.aiReviewSummaryMeta.textContent = "Running AI review";
+    return;
+  }
+
+  if (entry.status === "error" || entry.status === "local") {
+    elements.aiReviewSummary.value = [
+      entry.title || "AI review unavailable",
+      "",
+      entry.message ||
+        "The AI review suggestion could not be generated for this template.",
+    ].join("\n");
+    elements.aiReviewSummaryMeta.textContent =
+      entry.status === "local" ? "Local preview mode" : "AI review failed";
+    return;
+  }
+
+  const { data } = entry;
+  elements.aiReviewSummary.value = formatAiReviewSummaryText(data);
+  elements.aiReviewSummaryMeta.textContent = [
+    `Suggested ${data.suggestedDecision}`,
+    data.extracted?.indexed ? "Indexed" : "Not indexed",
+    `${data.extracted?.fieldCount ?? "—"} fields`,
+    `${data.extracted?.faqCount ?? "—"} FAQ items`,
+    formatDateTime(data.analyzedAt),
+  ]
+    .filter(Boolean)
+    .join(" • ");
+}
+
+function formatAiReviewSummaryText(data) {
+  const lines = [
+    `Suggested Decision: ${data.suggestedDecision}`,
+    "",
+    `Summary: ${data.summary || "No summary generated."}`,
+    "",
+    "Signals:",
+    `- H1: ${data.extracted?.h1 || "—"}`,
+    `- Meta length: ${data.extracted?.metaLength ?? "—"}`,
+    `- Language: ${(data.extracted?.language || "unknown").toUpperCase()}`,
+    `- Indexed: ${data.extracted?.indexed ? "Yes" : "No"}`,
+    `- Field count: ${data.extracted?.fieldCount ?? "—"}`,
+    `- FAQ count: ${data.extracted?.faqCount ?? "—"}`,
+    "",
+    "Checks:",
+    ...data.checks.map(
+      (check) =>
+        `- ${check.label} [${String(check.status || "").toUpperCase()}]: ${check.detail}`,
+    ),
+  ];
+
+  return lines.join("\n");
+}
+
+function ensureAiReview(item) {
+  if (!item?.id || !item.templateUrl) {
+    return;
+  }
+
+  const entry = state.aiReview.cache[item.id];
+
+  if (entry && ["loading", "ready", "local"].includes(entry.status)) {
+    return;
+  }
+
+  if (entry?.status === "error") {
+    return;
+  }
+
+  loadAiReview(item);
+}
+
+async function loadAiReview(item, { force = false } = {}) {
+  if (!item?.templateUrl) {
+    return;
+  }
+
+  if (window.location.protocol === "file:" && !force) {
+    state.aiReview.cache[item.id] = {
+      status: "local",
+      title: "Live AI review runs on the deployed dashboard",
+      message:
+        "This local file view cannot analyze templates by itself. Use the deployed dashboard or press refresh after deploying the new API route.",
+    };
+    render();
+    return;
+  }
+
+  state.aiReview.cache[item.id] = { status: "loading" };
+  render();
+
+  try {
+    const params = new URLSearchParams({
+      templateUrl: item.templateUrl,
+      title: item.title || "",
+      useCase: item.useCase || item.keyword || "",
+    });
+    const payload = await fetchJson(
+      `${resolveAiReviewEndpoint()}?${params.toString()}`,
+    );
+
+    state.aiReview.cache[item.id] = {
+      status: "ready",
+      data: payload,
+    };
+  } catch (error) {
+    state.aiReview.cache[item.id] = {
+      status: "error",
+      title: "AI review could not be loaded",
+      message:
+        error.message || "The template analysis endpoint did not return a review.",
+    };
+  }
+
+  render();
+}
+
+function resolveAiReviewEndpoint() {
+  if (window.location.protocol === "file:") {
+    return `${SHARED_DASHBOARD_ORIGIN}${API_ENDPOINTS.aiReview}`;
+  }
+
+  return API_ENDPOINTS.aiReview;
+}
+
+function renderSavedReviewRecord(item) {
+  const savedRecord = {
+    id: item.id,
+    templateId: item.templateId,
+    templateUrl: item.templateUrl,
+    title: item.title,
+    generatedDate: item.generatedDate,
+    campaignName: item.campaignName,
+    displayCampaign: item.displayCampaign,
+    reviewStatus: item.reviewStatus,
+    reviewDecision: item.reviewDecision,
+    reviewer: item.reviewer,
+    reviewedAt: item.reviewedAt,
+    priority: item.priority,
+    checks: item.checks,
+  };
+
+  elements.savedReviewRecord.textContent = JSON.stringify(savedRecord, null, 2);
+}
+
+async function persistCurrentReview() {
   const item = state.allItems.find((entry) => entry.id === state.selectedId);
 
-  if (!item) return;
+  if (!item) return false;
 
   const previousItem = JSON.parse(JSON.stringify(item));
   const reviewPayload = collectReviewPayload();
@@ -515,11 +707,6 @@ async function saveCurrentReview() {
   replaceItemInState(optimisticItem);
   persistPreferences();
   render();
-
-  elements.markReviewed.disabled = true;
-  elements.markReviewed.textContent = state.sync.canWrite
-    ? "Saving…"
-    : "Saved Locally";
 
   try {
     if (state.sync.canWrite) {
@@ -543,14 +730,33 @@ async function saveCurrentReview() {
         "Review saved locally in this browser. Configure shared storage to share it with the team.",
       );
     }
+
+    return true;
   } catch (error) {
     replaceItemInState(previousItem);
     setSyncStatus(
       "error",
       error.message || "Could not save the review. Please try again.",
     );
+
+    return false;
   } finally {
-    elements.markReviewed.disabled = false;
+    render();
+  }
+}
+
+async function saveCurrentReview() {
+  state.reviewActionBusy = true;
+  elements.markReviewed.disabled = true;
+  elements.nextTemplate.disabled = true;
+  elements.markReviewed.textContent = state.sync.canWrite
+    ? "Saving…"
+    : "Saved Locally";
+
+  try {
+    await persistCurrentReview();
+  } finally {
+    state.reviewActionBusy = false;
     elements.markReviewed.textContent = "Save Review";
     render();
   }
@@ -581,10 +787,29 @@ function getNextFilteredItemId(currentId) {
   return state.filteredItems[currentIndex + 1].id;
 }
 
-function goToNextTemplate() {
+async function goToNextTemplate() {
   const nextId = getNextFilteredItemId(state.selectedId);
 
   if (!nextId) return;
+
+  if (elements.reviewDecision.value !== "Pending") {
+    state.reviewActionBusy = true;
+    elements.markReviewed.disabled = true;
+    elements.nextTemplate.disabled = true;
+    elements.nextTemplate.textContent = "Saving…";
+
+    try {
+      const didSave = await persistCurrentReview();
+
+      if (!didSave) {
+        return;
+      }
+    } finally {
+      state.reviewActionBusy = false;
+      elements.nextTemplate.textContent = "Next Template";
+      render();
+    }
+  }
 
   state.selectedId = nextId;
   render();
@@ -680,6 +905,23 @@ function parseDelimitedDataset(text, fileName) {
 function normalizeRow(row, index = 0) {
   const templateUrl = row["Template URL"] || row.templateUrl || row.URL || "";
   const useCase = row["Use Case"] || row.useCase || "";
+  const reviewedFlag = String(
+    row["Reviewed?"] || row.reviewed || row.reviewedFlag || "",
+  )
+    .trim()
+    .toLowerCase();
+  const issueNotes = [row.Issues || row.issues || "", row.Actions || row.actions || ""]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" ");
+  const importedDecision = deriveImportedDecision(
+    row["Final Decision"] ||
+      row["Review Decision"] ||
+      row.reviewDecision ||
+      "",
+    reviewedFlag,
+    issueNotes,
+  );
   const title =
     row["Original Template Title"] ||
     row["Template Title"] ||
@@ -735,10 +977,12 @@ function normalizeRow(row, index = 0) {
     originalTemplateUrl:
       row["Original Template URL"] || row.originalTemplateUrl || "",
     priority: row.Priority || row.priority || "",
-    reviewDecision:
-      row["Final Decision"] || row["Review Decision"] || row.reviewDecision || "Pending",
-    reviewNotes: row["Review Notes"] || row.reviewNotes || "",
-    reviewStatus: row["Review Status"] || row.reviewStatus || "Pending",
+    reviewDecision: importedDecision,
+    reviewNotes: row["Review Notes"] || row.reviewNotes || issueNotes,
+    reviewStatus:
+      row["Review Status"] ||
+      row.reviewStatus ||
+      (reviewedFlag === "true" || reviewedFlag === "yes" ? "Reviewed" : "Pending"),
     reviewedAt: row["Reviewed At"] || row.reviewedAt || "",
     reviewer: row.Assignee || row.Reviewer || row.reviewer || "",
     sourceForm: row["Source Form"] || row.sourceForm || "",
@@ -782,6 +1026,26 @@ function normalizeReviewDecision(value) {
   return ["Pending", "Pass", "Needs Fix", "Escalate L2"].includes(value)
     ? value
     : "Pending";
+}
+
+function deriveImportedDecision(value, reviewedFlag, issueNotes) {
+  const normalizedDirectDecision = normalizeReviewDecision(String(value || "").trim());
+
+  if (normalizedDirectDecision !== "Pending") {
+    return normalizedDirectDecision;
+  }
+
+  const reviewed = reviewedFlag === "true" || reviewedFlag === "yes";
+
+  if (!reviewed) {
+    return "Pending";
+  }
+
+  if (/\bl2\b|escalat/i.test(issueNotes)) {
+    return "Escalate L2";
+  }
+
+  return issueNotes ? "Needs Fix" : "Pass";
 }
 
 function splitDelimitedRow(row, delimiter) {
