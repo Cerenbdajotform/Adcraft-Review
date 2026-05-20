@@ -7,13 +7,9 @@ const API_ENDPOINTS = {
   aiReview: "/api/ai-review",
 };
 const SHARED_DASHBOARD_ORIGIN = "https://adcraft-review-ceren.vercel.app";
-const L2_TICKET_URL =
-  "https://support.jotform.com/admn/dashboards/l2-tickets/create/";
-const L2_TICKET_ASSIGNEE = "Ceren Bozada";
-const L2_TICKET_TYPE = "Feedback";
-const L2_TICKET_PRIORITY = "Low";
-const L2_TICKET_FAIL_TITLE_PREFIX =
-  "Template Adcraft Form AI Review suggestion:";
+const SLACK_DM_RECIPIENT = "Ceren Bozada";
+const SLACK_LAUNCH_URL = "slack://open";
+const AI_REVIEW_STALE_MS = 60 * 60 * 1000;
 const DEFAULT_ASSIGNEE = "Ceren";
 const ASSIGNEE_OPTIONS = ["Ceren", "Batuhan", "Buğçe", "Mehmet"];
 
@@ -491,12 +487,12 @@ function renderDetail() {
     "aria-disabled",
     !(item.originalTemplateUrl || item.templateUrl),
   );
-  const l2Draft = buildL2TicketDraft(item);
-  elements.openL2Ticket.href = buildL2TicketUrl(l2Draft);
-  elements.openL2Ticket.dataset.mode = l2Draft ? "prefilled" : "plain";
-  elements.openL2Ticket.textContent = l2Draft
-    ? "Open L2 Ticket Draft"
-    : "Open L2 Ticket";
+  const slackDraft = buildSlackMessageDraft(item);
+  elements.openL2Ticket.href = slackDraft ? SLACK_LAUNCH_URL : "#";
+  elements.openL2Ticket.dataset.mode = slackDraft ? "prefilled" : "plain";
+  elements.openL2Ticket.textContent = slackDraft
+    ? "Send Slack DM"
+    : "Prepare Slack DM";
   elements.templateFrame.src = item.templateUrl || "about:blank";
 
   renderFacts(item);
@@ -521,31 +517,45 @@ async function handleOpenL2Ticket(event) {
     return;
   }
 
-  const l2Draft = buildL2TicketDraft(item);
+  event.preventDefault();
 
-  if (!l2Draft) {
+  if (item.templateUrl) {
+    try {
+      await loadAiReview(item, { force: true });
+    } catch {
+      // Keep the latest available cache entry if the refresh fails.
+    }
+  }
+
+  const slackDraft = buildSlackMessageDraft(item);
+
+  if (!slackDraft) {
+    setSyncStatus(
+      state.sync.canWrite ? "shared" : "local",
+      "The latest AI review does not need a Slack escalation for this template.",
+    );
+    render();
     return;
   }
 
-  event.preventDefault();
   elements.reviewDecision.value = "Escalate L2";
 
   try {
     if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(l2Draft.clipboardText);
+      await navigator.clipboard.writeText(slackDraft.messageText);
       setSyncStatus(
         state.sync.canWrite ? "shared" : "local",
-        `L2 draft copied for ${L2_TICKET_ASSIGNEE}. Opened the ticket page with the fail title prefilled.`,
+        `Slack DM copied for ${SLACK_DM_RECIPIENT}. Slack was opened so you can paste and send it.`,
       );
     }
   } catch {
     setSyncStatus(
       state.sync.canWrite ? "shared" : "local",
-      "Opened the L2 ticket page. Clipboard copy was blocked, so paste the fail reason manually if needed.",
+      "Slack was opened, but clipboard copy was blocked. Copy the escalation details manually if needed.",
     );
   }
 
-  window.open(buildL2TicketUrl(l2Draft), "_blank", "noopener,noreferrer");
+  window.open(SLACK_LAUNCH_URL, "_blank", "noopener,noreferrer");
   render();
 }
 
@@ -653,20 +663,24 @@ function ensureAiReview(item) {
 
   const entry = state.aiReview.cache[item.id];
 
-  if (entry && ["loading", "ready", "local"].includes(entry.status)) {
+  if (entry?.status === "loading" || entry?.status === "local") {
     return;
   }
 
-  if (entry?.status === "error") {
+  if (entry?.status === "ready" && !isAiReviewStale(entry)) {
     return;
   }
 
-  loadAiReview(item);
+  if (entry?.status === "error" && !isAiReviewStale(entry)) {
+    return;
+  }
+
+  loadAiReview(item, { force: entry?.status === "ready" || entry?.status === "error" });
 }
 
 async function loadAiReview(item, { force = false } = {}) {
   if (!item?.templateUrl) {
-    return;
+    return null;
   }
 
   if (window.location.protocol === "file:" && !force) {
@@ -677,7 +691,7 @@ async function loadAiReview(item, { force = false } = {}) {
         "This local file view cannot analyze templates by itself. Use the deployed dashboard or press refresh after deploying the new API route.",
     };
     render();
-    return;
+    return null;
   }
 
   state.aiReview.cache[item.id] = { status: "loading" };
@@ -698,17 +712,43 @@ async function loadAiReview(item, { force = false } = {}) {
     state.aiReview.cache[item.id] = {
       status: "ready",
       data: payload,
+      updatedAt: payload?.analyzedAt || new Date().toISOString(),
     };
+
+    render();
+    return payload;
   } catch (error) {
     state.aiReview.cache[item.id] = {
       status: "error",
       title: "AI review could not be loaded",
       message:
         error.message || "The template analysis endpoint did not return a review.",
+      errorAt: new Date().toISOString(),
     };
+
+    render();
+    throw error;
+  }
+}
+
+function isAiReviewStale(entry) {
+  const analyzedAt =
+    entry?.data?.analyzedAt ||
+    entry?.updatedAt ||
+    entry?.errorAt ||
+    "";
+
+  if (!analyzedAt) {
+    return true;
   }
 
-  render();
+  const timestamp = Date.parse(analyzedAt);
+
+  if (Number.isNaN(timestamp)) {
+    return true;
+  }
+
+  return Date.now() - timestamp > AI_REVIEW_STALE_MS;
 }
 
 function resolveAiReviewEndpoint() {
@@ -739,7 +779,7 @@ function renderSavedReviewRecord(item) {
   elements.savedReviewRecord.textContent = JSON.stringify(savedRecord, null, 2);
 }
 
-function buildL2TicketDraft(item) {
+function buildSlackMessageDraft(item) {
   const entry = state.aiReview.cache[item.id];
   const data = entry?.status === "ready" ? entry.data : null;
   const currentDecision =
@@ -762,43 +802,22 @@ function buildL2TicketDraft(item) {
         "- Final decision was manually set to Escalate L2 by the reviewer.",
         ...(data?.summary ? [`- AI review summary: ${data.summary}`] : []),
       ];
-  const title = `${L2_TICKET_FAIL_TITLE_PREFIX} ${item.title || "Template Review"} - Template Review: Fail`;
-  const description = [
-    `Template review reason:`,
+  const lines = [
+    `Hi ${SLACK_DM_RECIPIENT},`,
+    "",
+    "The review dashboard flagged this template for escalation.",
+    "",
+    `Template: ${item.title || "Template Review"}`,
+    `Template link: ${item.templateUrl || "—"}`,
+    `Final decision: ${currentDecision}`,
     ...failReasonLines,
     `AI suggested decision: ${data?.suggestedDecision || "Needs Fix"}`,
-    `Suggested assignee: ${L2_TICKET_ASSIGNEE}`,
-    `Suggested type: ${L2_TICKET_TYPE}`,
-    `Suggested priority: ${L2_TICKET_PRIORITY}`,
-    `Form template link:`,
-    item.templateUrl || "—",
-  ].join("\n");
+  ];
 
   return {
-    description,
     failedChecks,
-    pageUrl: item.templateUrl || "",
-    title,
-    clipboardText: [
-      `Ticket Title: ${title}`,
-      `Assignee: ${L2_TICKET_ASSIGNEE}`,
-      `Type: ${L2_TICKET_TYPE}`,
-      `Priority: ${L2_TICKET_PRIORITY}`,
-      description,
-    ].join("\n"),
+    messageText: lines.join("\n"),
   };
-}
-
-function buildL2TicketUrl(l2Draft) {
-  if (!l2Draft) {
-    return L2_TICKET_URL;
-  }
-
-  const params = new URLSearchParams({
-    title: l2Draft.title,
-  });
-
-  return `${L2_TICKET_URL}?${params.toString()}`;
 }
 
 async function persistCurrentReview() {
