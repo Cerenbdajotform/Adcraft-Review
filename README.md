@@ -44,6 +44,8 @@ Recommended optional variables:
 
 - `SUPABASE_TABLE=review_dashboard_state`
 - `SUPABASE_STATE_ROW_ID=primary`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL=gpt-5-mini`
 - `GITHUB_BASE_BRANCH=main`
 - `GITHUB_DATA_BRANCH=review-data`
 - `GITHUB_STATE_PATH=data/review-dashboard-state.json`
@@ -69,6 +71,33 @@ Then add:
 - `SUPABASE_SERVICE_ROLE_KEY`
 
 The dashboard API uses the service role key on the server side, so reviewers do not need direct database credentials in the browser.
+
+## OpenAI review connection
+
+The dashboard can now use OpenAI as the review engine for `GET /api/ai-review`.
+
+Add these Vercel environment variables:
+
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+
+Recommended model:
+
+- `OPENAI_MODEL=gpt-5-mini`
+
+How it behaves:
+
+- when `OPENAI_API_KEY` exists, the API sends the extracted template title, meta description, description paragraphs, FAQ content, field labels, and rule signals to OpenAI
+- OpenAI returns a structured review with:
+  - `suggestedDecision`
+  - `summary`
+  - 8 check results
+- when `OPENAI_API_KEY` is missing or the model call fails, the endpoint falls back to the built-in rule-based review logic
+
+The frontend will show:
+
+- `OpenAI gpt-5-mini` in the AI review meta line when the OpenAI path is active
+- `Rule-based fallback` when it is not
 
 ## GitHub fallback
 

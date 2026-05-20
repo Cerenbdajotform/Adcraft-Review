@@ -622,6 +622,9 @@ function renderAiReview(item) {
   const { data } = entry;
   elements.aiReviewSummary.value = formatAiReviewSummaryText(data);
   elements.aiReviewSummaryMeta.textContent = [
+    data.extracted?.reviewEngine === "openai"
+      ? `OpenAI ${data.extracted?.reviewModel || ""}`.trim()
+      : "Rule-based fallback",
     `Suggested ${data.suggestedDecision}`,
     data.extracted?.indexed ? "Indexed" : "Not indexed",
     `${data.extracted?.fieldCount ?? "—"} fields`,

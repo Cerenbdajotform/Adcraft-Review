@@ -7,6 +7,87 @@ const FETCH_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (compatible; AdcraftReviewDashboard/1.0; +https://adcraft-review-ceren.vercel.app/)",
 };
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY || "";
+const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-mini";
+const OPENAI_API_BASE = process.env.OPENAI_API_BASE || "https://api.openai.com/v1";
+const REVIEW_CHECK_LABELS = [
+  "Title and H1",
+  "Meta description",
+  "Description structure",
+  "FAQ coverage",
+  "Field count and options",
+  "Use-case alignment",
+  "Safety and compliance",
+  "Indexing and setup",
+];
+const OPENAI_REVIEW_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    suggestedDecision: {
+      type: "string",
+      enum: ["Pass", "Needs Fix", "Escalate L2"],
+    },
+    summary: {
+      type: "string",
+    },
+    checks: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          label: {
+            type: "string",
+            enum: REVIEW_CHECK_LABELS,
+          },
+          status: {
+            type: "string",
+            enum: ["pass", "warn", "fail"],
+          },
+          detail: {
+            type: "string",
+          },
+        },
+        required: ["label", "status", "detail"],
+      },
+    },
+  },
+  required: ["suggestedDecision", "summary", "checks"],
+};
+const OPENAI_REVIEW_INSTRUCTIONS = `
+You are reviewing Jotform form templates for Adcraft.
+
+Evaluate each template against the generation and content rules below. Be strict and practical.
+
+Form generation rules:
+- The generated form title, template title, and English H1 must be aligned. If the page is English, the H1 must end with the word "Form".
+- Do not allow emojis in the title, H1, or form.
+- The form should contain exactly 10 usable fields according to the generation rules.
+- Field types and labels must match the use case.
+- Order-focused templates should expose a product list or clear product selection.
+- Checklist use cases should behave like checklist forms, not radio-based forms.
+- Consent/release use cases should include a relevant consent-style field, but order or purchase forms should not contain unnecessary consent acknowledgement fields.
+- Choice fields must not have blank options.
+- Do not allow sensitive ID or financial fields like full credit card numbers, SSN, passport number, bank account number, IBAN, or similar identifiers.
+- Do not allow illegal, sexual, gambling, or similar unsafe content.
+- Do not allow claims such as HIPAA compliant, GDPR compliant, legally binding, or similar compliance promises.
+
+Template content rules:
+- Meta description should be meaningful, factual, and roughly within 120-320 characters.
+- The description should be two paragraphs and approximately 900-1500 characters total.
+- FAQ should normally contain 5-8 question and answer pairs and cover the core topics of purpose, included information, timing, audience, and benefits.
+- For non-English templates, content should be properly localized and should not mix English technical wording except the brand name Jotform when appropriate.
+- Descriptions should not promote non-Jotform brands.
+
+Decision rules:
+- Return "Pass" only when the template looks clean and aligned overall.
+- Return "Needs Fix" for correctable content, structure, field, FAQ, indexing, or alignment problems.
+- Return "Escalate L2" for sensitive-field issues, unsafe content, serious compliance language issues, or other severe problems that deserve manual escalation.
+
+Always return all 8 checks using exactly these labels:
+${REVIEW_CHECK_LABELS.join(", ")}.
+`;
 
 const STOP_WORDS = new Set([
   "a",
@@ -343,36 +424,281 @@ async function analyzeTemplate({
       },
     ),
   ];
-
-  const suggestedDecision = suggestDecision(checks, {
+  const heuristicSuggestedDecision = suggestDecision(checks, {
     complianceClaim,
     illegalContent,
     sensitiveFieldCount: sensitiveFields.length,
   });
-  const summary = buildSummary(suggestedDecision, checks, {
+  const heuristicSummary = buildSummary(heuristicSuggestedDecision, checks, {
     fieldCount,
     h1: preview.h1 || displayTitle,
   });
+  const extracted = {
+    aboutLength,
+    faqCount,
+    fieldCount,
+    h1: preview.h1,
+    indexed,
+    language: lang,
+    metaLength,
+    pageTitle: displayTitle,
+    previewUrl,
+    radioGroupCount: preview.radioGroupCount,
+    previewFetchError: previewAttempt.error?.message || "",
+  };
+  const reviewInput = buildOpenAIReviewInput({
+    aboutParagraphs,
+    alignmentIssues,
+    availableFieldNames: uniqueValues([
+      ...jsonLdFieldNames,
+      ...preview.fields.map((field) => field.label),
+    ]).filter(Boolean),
+    checklistExpected,
+    checklistUsesOnlyChecklistInputs,
+    complianceClaim,
+    consentLikeUseCase,
+    displayTitle,
+    englishPage,
+    expectedTitle,
+    extracted,
+    faqPairs,
+    hasAvailableFields,
+    hasConsentField,
+    hasEmptyChoices,
+    hasEmoji,
+    hasProductList,
+    h1EndsWithForm,
+    heuristicChecks: checks,
+    heuristicSuggestedDecision,
+    heuristicSummary,
+    illegalContent,
+    indexed,
+    metaDescription,
+    orderLikeUseCase,
+    preview,
+    robots,
+    sameTitleAsExpected,
+    sameTitleAsH1,
+    sensitiveFields,
+    templateUrl,
+    titleIncludesForm,
+    useCase,
+  });
+  const openAiReview = await maybeRunOpenAIReview(reviewInput);
+
+  if (openAiReview) {
+    return {
+      analyzedAt: new Date().toISOString(),
+      checks: openAiReview.checks,
+      extracted: {
+        ...extracted,
+        reviewEngine: "openai",
+        reviewModel: OPENAI_MODEL,
+      },
+      summary: openAiReview.summary,
+      suggestedDecision: openAiReview.suggestedDecision,
+    };
+  }
 
   return {
     analyzedAt: new Date().toISOString(),
     checks,
     extracted: {
-      aboutLength,
-      faqCount,
-      fieldCount,
-      h1: preview.h1,
-      indexed,
-      language: lang,
-      metaLength,
-      pageTitle: displayTitle,
-      previewUrl,
-      radioGroupCount: preview.radioGroupCount,
-      previewFetchError: previewAttempt.error?.message || "",
+      ...extracted,
+      reviewEngine: "heuristic",
+      reviewModel: "rules-fallback",
     },
-    summary,
-    suggestedDecision,
+    summary: heuristicSummary,
+    suggestedDecision: heuristicSuggestedDecision,
   };
+}
+
+function hasOpenAIConfig() {
+  return Boolean(OPENAI_API_KEY);
+}
+
+function buildOpenAIReviewInput(context) {
+  return {
+    template: {
+      url: context.templateUrl,
+      expectedTitle: context.expectedTitle,
+      liveTitle: context.displayTitle,
+      useCase: context.useCase,
+      language: context.extracted.language,
+      englishPage: context.englishPage,
+      indexed: context.indexed,
+      robots: context.robots,
+    },
+    content: {
+      metaDescription: context.metaDescription,
+      descriptionParagraphs: context.aboutParagraphs,
+      faqPairs: context.faqPairs,
+    },
+    preview: {
+      h1: context.preview.h1,
+      subHeader: context.preview.subHeader,
+      fieldCount: context.preview.fieldCount,
+      radioGroupCount: context.preview.radioGroupCount,
+      checkboxGroupCount: context.preview.checkboxGroupCount,
+      choiceFieldCount: context.preview.choiceFieldCount,
+      fields: context.preview.fields.slice(0, 20),
+      availableFieldNames: context.availableFieldNames.slice(0, 30),
+      previewUrl: context.extracted.previewUrl,
+      previewFetchError: context.extracted.previewFetchError,
+    },
+    ruleSignals: {
+      aboutLength: context.extracted.aboutLength,
+      faqCount: context.extracted.faqCount,
+      metaLength: context.extracted.metaLength,
+      fieldCount: context.extracted.fieldCount,
+      sameTitleAsExpected: context.sameTitleAsExpected,
+      sameTitleAsH1: context.sameTitleAsH1,
+      h1EndsWithForm: context.h1EndsWithForm,
+      titleIncludesForm: context.titleIncludesForm,
+      hasEmoji: context.hasEmoji,
+      hasEmptyChoices: context.hasEmptyChoices,
+      hasConsentField: context.hasConsentField,
+      hasProductList: context.hasProductList,
+      hasAvailableFields: context.hasAvailableFields,
+      checklistExpected: context.checklistExpected,
+      checklistUsesOnlyChecklistInputs:
+        context.checklistUsesOnlyChecklistInputs,
+      orderLikeUseCase: context.orderLikeUseCase,
+      consentLikeUseCase: context.consentLikeUseCase,
+      complianceClaim: context.complianceClaim,
+      illegalContent: context.illegalContent,
+      sensitiveFields: context.sensitiveFields,
+      alignmentIssues: context.alignmentIssues,
+    },
+    heuristicReview: {
+      suggestedDecision: context.heuristicSuggestedDecision,
+      summary: context.heuristicSummary,
+      checks: context.heuristicChecks,
+    },
+  };
+}
+
+async function maybeRunOpenAIReview(reviewInput) {
+  if (!hasOpenAIConfig()) {
+    return null;
+  }
+
+  try {
+    return await runOpenAIReview(reviewInput);
+  } catch {
+    return null;
+  }
+}
+
+async function runOpenAIReview(reviewInput) {
+  const response = await fetch(`${OPENAI_API_BASE}/responses`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      input: [
+        {
+          role: "developer",
+          content: [
+            {
+              type: "input_text",
+              text: OPENAI_REVIEW_INSTRUCTIONS,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: JSON.stringify(reviewInput, null, 2),
+            },
+          ],
+        },
+      ],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "adcraft_template_review",
+          strict: true,
+          schema: OPENAI_REVIEW_SCHEMA,
+        },
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const error = new Error(`OpenAI request failed with ${response.status}.`);
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  const payload = await response.json();
+  const parsed = JSON.parse(extractResponseText(payload) || "{}");
+
+  return normalizeOpenAIReview(parsed);
+}
+
+function extractResponseText(payload) {
+  const outputItems = Array.isArray(payload?.output) ? payload.output : [];
+  const textParts = [];
+
+  for (const item of outputItems) {
+    if (item?.type !== "message" || !Array.isArray(item.content)) {
+      continue;
+    }
+
+    for (const contentItem of item.content) {
+      if (contentItem?.type === "output_text" && contentItem?.text) {
+        textParts.push(contentItem.text);
+      }
+    }
+  }
+
+  return textParts.join("").trim();
+}
+
+function normalizeOpenAIReview(parsed) {
+  const parsedChecks = Array.isArray(parsed?.checks) ? parsed.checks : [];
+  const checksByLabel = new Map(
+    parsedChecks
+      .filter((check) => REVIEW_CHECK_LABELS.includes(check?.label))
+      .map((check) => [
+        check.label,
+        {
+          label: check.label,
+          status: normalizeReviewStatusValue(check.status),
+          detail: cleanText(check.detail),
+        },
+      ]),
+  );
+
+  const checks = REVIEW_CHECK_LABELS.map((label) =>
+    checksByLabel.get(label) || {
+      label,
+      status: "warn",
+      detail: "OpenAI did not return a result for this check.",
+    },
+  );
+
+  return {
+    suggestedDecision: normalizeSuggestedDecision(parsed?.suggestedDecision),
+    summary: cleanText(parsed?.summary) || "OpenAI review completed.",
+    checks,
+  };
+}
+
+function normalizeSuggestedDecision(value) {
+  return ["Pass", "Needs Fix", "Escalate L2"].includes(value)
+    ? value
+    : "Needs Fix";
+}
+
+function normalizeReviewStatusValue(value) {
+  return ["pass", "warn", "fail"].includes(value) ? value : "warn";
 }
 
 async function fetchText(url, label = "Template") {
