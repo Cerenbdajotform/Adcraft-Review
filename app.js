@@ -7,8 +7,6 @@ const API_ENDPOINTS = {
   aiReview: "/api/ai-review",
 };
 const SHARED_DASHBOARD_ORIGIN = "https://adcraft-review-ceren.vercel.app";
-const SLACK_DM_RECIPIENT = "Ceren Bozada";
-const SLACK_LAUNCH_URL = "slack://open";
 const AI_REVIEW_STALE_MS = 60 * 60 * 1000;
 const DEFAULT_ASSIGNEE = "Ceren";
 const ASSIGNEE_OPTIONS = ["Ceren", "Batuhan", "Buğçe", "Mehmet"];
@@ -63,7 +61,6 @@ const elements = {
   templateFrame: document.getElementById("template-frame"),
   openTemplate: document.getElementById("open-template"),
   openOriginalTemplate: document.getElementById("open-original-template"),
-  openL2Ticket: document.getElementById("open-l2-ticket"),
   nextTemplate: document.getElementById("next-template"),
   reviewerName: document.getElementById("reviewer-name"),
   reviewDecision: document.getElementById("review-decision"),
@@ -174,7 +171,6 @@ function bindEvents() {
 
   elements.nextTemplate.addEventListener("click", goToNextTemplate);
   elements.markReviewed.addEventListener("click", saveCurrentReview);
-  elements.openL2Ticket.addEventListener("click", handleOpenL2Ticket);
   elements.refreshAiReview.addEventListener("click", () => {
     const item = state.allItems.find((entry) => entry.id === state.selectedId);
 
@@ -487,12 +483,6 @@ function renderDetail() {
     "aria-disabled",
     !(item.originalTemplateUrl || item.templateUrl),
   );
-  const slackDraft = buildSlackMessageDraft(item);
-  elements.openL2Ticket.href = slackDraft ? SLACK_LAUNCH_URL : "#";
-  elements.openL2Ticket.dataset.mode = slackDraft ? "prefilled" : "plain";
-  elements.openL2Ticket.textContent = slackDraft
-    ? "Send Slack DM"
-    : "Prepare Slack DM";
   elements.templateFrame.src = item.templateUrl || "about:blank";
 
   renderFacts(item);
@@ -508,55 +498,6 @@ function renderDetail() {
     state.reviewActionBusy || getNextFilteredItemId(item.id) === null;
 
   ensureAiReview(item);
-}
-
-async function handleOpenL2Ticket(event) {
-  const item = state.allItems.find((entry) => entry.id === state.selectedId);
-
-  if (!item) {
-    return;
-  }
-
-  event.preventDefault();
-
-  if (item.templateUrl) {
-    try {
-      await loadAiReview(item, { force: true });
-    } catch {
-      // Keep the latest available cache entry if the refresh fails.
-    }
-  }
-
-  const slackDraft = buildSlackMessageDraft(item);
-
-  if (!slackDraft) {
-    setSyncStatus(
-      state.sync.canWrite ? "shared" : "local",
-      "The latest AI review does not need a Slack escalation for this template.",
-    );
-    render();
-    return;
-  }
-
-  elements.reviewDecision.value = "Escalate L2";
-
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(slackDraft.messageText);
-      setSyncStatus(
-        state.sync.canWrite ? "shared" : "local",
-        `Slack DM copied for ${SLACK_DM_RECIPIENT}. Slack was opened so you can paste and send it.`,
-      );
-    }
-  } catch {
-    setSyncStatus(
-      state.sync.canWrite ? "shared" : "local",
-      "Slack was opened, but clipboard copy was blocked. Copy the escalation details manually if needed.",
-    );
-  }
-
-  window.open(SLACK_LAUNCH_URL, "_blank", "noopener,noreferrer");
-  render();
 }
 
 function renderFacts(item) {
@@ -780,47 +721,6 @@ function renderSavedReviewRecord(item) {
   };
 
   elements.savedReviewRecord.textContent = JSON.stringify(savedRecord, null, 2);
-}
-
-function buildSlackMessageDraft(item) {
-  const entry = state.aiReview.cache[item.id];
-  const data = entry?.status === "ready" ? entry.data : null;
-  const currentDecision =
-    item.id === state.selectedId
-      ? elements.reviewDecision.value || item.reviewDecision
-      : item.reviewDecision;
-
-  const failedChecks = Array.isArray(data.checks)
-    ? data.checks.filter((check) => check.status === "fail")
-    : [];
-  const isManualEscalation = currentDecision === "Escalate L2";
-
-  if (!failedChecks.length && !isManualEscalation) {
-    return null;
-  }
-
-  const failReasonLines = failedChecks.length
-    ? failedChecks.map((check) => `- ${check.label}: ${check.detail}`)
-    : [
-        "- Final decision was manually set to Escalate L2 by the reviewer.",
-        ...(data?.summary ? [`- AI review summary: ${data.summary}`] : []),
-      ];
-  const lines = [
-    `Hi ${SLACK_DM_RECIPIENT},`,
-    "",
-    "The review dashboard flagged this template for escalation.",
-    "",
-    `Template: ${item.title || "Template Review"}`,
-    `Template link: ${item.templateUrl || "—"}`,
-    `Final decision: ${currentDecision}`,
-    ...failReasonLines,
-    `AI suggested decision: ${data?.suggestedDecision || "Needs Fix"}`,
-  ];
-
-  return {
-    failedChecks,
-    messageText: lines.join("\n"),
-  };
 }
 
 async function persistCurrentReview() {
